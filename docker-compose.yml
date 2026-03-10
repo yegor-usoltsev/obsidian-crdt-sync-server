@@ -1,0 +1,17 @@
+services:
+  server:
+    image: ghcr.io/yegor-usoltsev/obsidian-crdt-sync-server:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/data
+    environment:
+      AUTH_TOKEN: ${AUTH_TOKEN}
+      DATA_DIR: /data
+      PORT: 3000
+      # Optional: git backup
+      # BACKUP_GIT_INTERVAL_MINUTES: 60
+      # BACKUP_GIT_URL: https://github.com/youruser/vault-backup.git
+      # BACKUP_GIT_USERNAME: youruser
+      # BACKUP_GIT_PASSWORD: ghp_yourtoken
