@@ -1,4 +1,5 @@
 import { Database as BunSQLite } from "bun:sqlite";
+import { mkdir } from "node:fs/promises";
 import { Database } from "@hocuspocus/extension-database";
 import { Server } from "@hocuspocus/server";
 import { join } from "pathe";
@@ -33,6 +34,7 @@ export async function createSyncServer({
   maxStatelessPayloadBytes = DEFAULT_MAX_STATELESS_PAYLOAD_BYTES,
   maxDocumentPayloadBytes = DEFAULT_MAX_DOCUMENT_PAYLOAD_BYTES,
 }: SyncServerConfig): Promise<Server> {
+  await mkdir(dataDir, { recursive: true });
   const marker = join(dataDir, `.bun-${Bun.randomUUIDv7()}`);
   await Bun.write(marker, "");
   await Bun.file(marker).delete();

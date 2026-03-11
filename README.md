@@ -47,8 +47,9 @@ docker run -d \
   -p 3000:3000 \
   -v ./data:/data \
   -e AUTH_TOKEN="your-random-secret-at-least-32-chars" \
-  -e DATA_DIR=/data \
-  ghcr.io/yegor-usoltsev/obsidian-crdt-sync-server:latest
+  -e DATA_DIR=/data/db \
+  -e BACKUP_GIT_WORKTREE_DIR=/data/git \
+  yusoltsev/obsidian-crdt-sync-server:latest
 ```
 
 ### From source
@@ -66,13 +67,13 @@ Set environment variables via a `.env` file or export them before running. See `
 | ----------------------------- | ------------------- | --------------------------- | ----------------------------------------------- |
 | `AUTH_TOKEN`                  | ✅                  | —                           | Shared secret for WebSocket auth (min 32 chars) |
 | `PORT`                        |                     | `3000`                      | Port to listen on                               |
-| `DATA_DIR`                    |                     | `./data`                    | Directory for the SQLite database               |
+| `DATA_DIR`                    |                     | `./data/db`                 | Directory for the SQLite database               |
 | `BACKUP_GIT_INTERVAL_MINUTES` |                     | —                           | Enable periodic Git backup (positive integer)   |
 | `BACKUP_GIT_URL`              | when backup enabled | —                           | HTTPS remote URL                                |
 | `BACKUP_GIT_USERNAME`         | when backup enabled | —                           | Git HTTPS username                              |
 | `BACKUP_GIT_PASSWORD`         | when backup enabled | —                           | Git HTTPS password or token                     |
 | `BACKUP_GIT_BRANCH`           |                     | `main`                      | Branch to push backups to                       |
-| `BACKUP_GIT_WORKTREE_DIR`     |                     | `<DATA_DIR>-git-backup`     | Local worktree directory                        |
+| `BACKUP_GIT_WORKTREE_DIR`     |                     | `./data/git`                | Local worktree directory                        |
 | `BACKUP_GIT_AUTHOR_NAME`      |                     | `obsidian-crdt-sync-server` | Git author name for backup commits              |
 | `BACKUP_GIT_AUTHOR_EMAIL`     |                     | `backup@localhost`          | Git author email for backup commits             |
 

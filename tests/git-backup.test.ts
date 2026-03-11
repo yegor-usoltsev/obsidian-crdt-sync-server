@@ -52,7 +52,7 @@ afterEach(async () => {
 
 describe("readGitBackupConfig", () => {
   test("returns null when backup is disabled", () => {
-    expect(readGitBackupConfig({}, "/tmp/data")).toBeNull();
+    expect(readGitBackupConfig({}, "/tmp/data/db")).toBeNull();
   });
 
   test("rejects non-https remotes", () => {
@@ -64,7 +64,7 @@ describe("readGitBackupConfig", () => {
           BACKUP_GIT_USERNAME: "user",
           BACKUP_GIT_PASSWORD: "token",
         },
-        "/tmp/data",
+        "/tmp/data/db",
       );
     }).toThrow("https://");
   });
@@ -76,7 +76,7 @@ describe("readGitBackupConfig", () => {
           BACKUP_GIT_INTERVAL_MINUTES: "5",
           BACKUP_GIT_URL: "https://example.com/repo.git",
         },
-        "/tmp/data",
+        "/tmp/data/db",
       );
     }).toThrow("BACKUP_GIT_USERNAME");
   });
@@ -89,9 +89,9 @@ describe("readGitBackupConfig", () => {
           BACKUP_GIT_URL: "https://example.com/repo.git",
           BACKUP_GIT_USERNAME: "user",
           BACKUP_GIT_PASSWORD: "token",
-          BACKUP_GIT_WORKTREE_DIR: "/tmp/data",
+          BACKUP_GIT_WORKTREE_DIR: "/tmp/data/db",
         },
-        "/tmp/data",
+        "/tmp/data/db",
       );
     }).toThrow("live DATA_DIR");
   });
@@ -106,7 +106,7 @@ describe("readGitBackupConfig", () => {
           BACKUP_GIT_PASSWORD: "token",
           BACKUP_GIT_WORKTREE_DIR: "/tmp",
         },
-        "/tmp/data",
+        "/tmp/data/db",
       );
     }).toThrow("live DATA_DIR");
   });
@@ -119,14 +119,14 @@ describe("readGitBackupConfig", () => {
           BACKUP_GIT_URL: "https://example.com/repo.git",
           BACKUP_GIT_USERNAME: "user",
           BACKUP_GIT_PASSWORD: "token",
-          BACKUP_GIT_WORKTREE_DIR: "/tmp/data/git-backup",
+          BACKUP_GIT_WORKTREE_DIR: "/tmp/data/db/git",
         },
-        "/tmp/data",
+        "/tmp/data/db",
       );
     }).toThrow("live DATA_DIR");
   });
 
-  test("defaults the backup worktree to a sibling directory outside DATA_DIR", () => {
+  test("defaults the backup worktree to ./data/git", () => {
     expect(
       readGitBackupConfig(
         {
@@ -135,10 +135,10 @@ describe("readGitBackupConfig", () => {
           BACKUP_GIT_USERNAME: "user",
           BACKUP_GIT_PASSWORD: "token",
         },
-        "/tmp/data",
+        "/tmp/data/db",
       ),
     ).toMatchObject({
-      worktreeDir: "/tmp/data-git-backup",
+      worktreeDir: "./data/git",
     });
   });
 });

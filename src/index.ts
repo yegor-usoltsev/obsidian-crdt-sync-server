@@ -4,7 +4,7 @@ import { createSyncServer } from "./server.ts";
 
 const port = Number(Bun.env.PORT ?? 3000);
 const authToken = Bun.env.AUTH_TOKEN;
-const dataDir = Bun.env.DATA_DIR ?? "./data";
+const dataDir = Bun.env.DATA_DIR ?? "./data/db";
 
 const MIN_AUTH_TOKEN_LENGTH = 32;
 

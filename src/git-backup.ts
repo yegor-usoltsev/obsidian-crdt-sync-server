@@ -1,7 +1,7 @@
 import { Database as BunSQLite } from "bun:sqlite";
 import type { Server } from "@hocuspocus/server";
 import { $ } from "bun";
-import { basename, dirname, isAbsolute, join, normalize, resolve } from "pathe";
+import { isAbsolute, join, normalize, resolve } from "pathe";
 import * as Y from "yjs";
 import { coerceFileKind } from "./file-kind.ts";
 import { log } from "./log.ts";
@@ -32,6 +32,7 @@ export interface GitBackupJob {
 const DEFAULT_BACKUP_BRANCH = "main";
 const DEFAULT_BACKUP_AUTHOR_NAME = "obsidian-crdt-sync-server";
 const DEFAULT_BACKUP_AUTHOR_EMAIL = "backup@localhost";
+const DEFAULT_BACKUP_GIT_WORKTREE_DIR = "./data/git";
 const REMOTE_NAME = "backup";
 const SQLITE_DOCUMENTS_QUERY = `SELECT data FROM "documents" WHERE name = ?`;
 const BACKUP_GITIGNORE_PATH = SYNC_IGNORE_RESERVED_PATH;
@@ -89,8 +90,7 @@ export function readGitBackupConfig(
 
   const resolvedDataDir = resolve(dataDir);
   const worktreeDir =
-    env.BACKUP_GIT_WORKTREE_DIR?.trim() ||
-    join(dirname(resolvedDataDir), `${basename(resolvedDataDir)}-git-backup`);
+    env.BACKUP_GIT_WORKTREE_DIR?.trim() || DEFAULT_BACKUP_GIT_WORKTREE_DIR;
   const resolvedWorktreeDir = resolve(worktreeDir);
   if (
     resolvedDataDir === resolvedWorktreeDir ||

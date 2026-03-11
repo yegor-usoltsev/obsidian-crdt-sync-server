@@ -11,7 +11,8 @@ COPY src src
 
 EXPOSE 3000
 
-ENV DATA_DIR=/mnt
-VOLUME ["/mnt"]
+ENV DATA_DIR=/data/db
+ENV BACKUP_GIT_WORKTREE_DIR=/data/git
+VOLUME ["/data"]
 
 ENTRYPOINT ["bun", "start"]
