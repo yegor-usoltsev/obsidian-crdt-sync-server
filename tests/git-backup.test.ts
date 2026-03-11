@@ -291,6 +291,9 @@ describe("runGitBackupOnce", () => {
 
       const cloneResult = await git(cloneParentDir, [
         "clone",
+        "--branch",
+        "main",
+        "--single-branch",
         remoteDir,
         cloneDir,
       ]);
