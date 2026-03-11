@@ -3,8 +3,16 @@ version: 2
 
 project_name: obsidian-crdt-sync-server
 
+before:
+  hooks:
+    - bun install --frozen-lockfile
+    - bun run build
+
 builds:
-  - id: docker-only
+  - id: server-assets
+    builder: bun
+    main: src/index.ts
+    binary: ignored
     skip: true
 
 changelog:
@@ -15,6 +23,8 @@ release:
     owner: yegor-usoltsev
     name: obsidian-crdt-sync-server
   name_template: "v{{ .Version }}"
+  extra_files:
+    - glob: ./main.js
 
 dockers_v2:
   - id: server-image
@@ -35,9 +45,7 @@ dockers_v2:
       org.opencontainers.image.source: "{{ .GitURL }}"
       org.opencontainers.image.version: "{{ .Version }}"
     extra_files:
-      - ./package.json
-      - ./bun.lock
-      - ./src
+      - ./main.js
     platforms:
       - linux/amd64
       - linux/arm64

@@ -16,6 +16,7 @@ yarn-error.log*
 
 # Build output
 dist/
+main.js
 
 # SQLite
 *.db

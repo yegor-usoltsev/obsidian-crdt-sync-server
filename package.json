@@ -5,6 +5,7 @@
   "type": "module",
   "module": "src/index.ts",
   "scripts": {
+    "build": "bun build src/index.ts --outfile=main.js --target=bun --minify",
     "check": "biome check --write .",
     "dev": "bun --watch src/index.ts",
     "prepare": "husky",

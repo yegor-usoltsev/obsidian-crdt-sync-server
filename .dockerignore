@@ -1,4 +1,2 @@
 *
-!/src
-!/bun.lock
-!/package.json
+!/main.js

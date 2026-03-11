@@ -109,7 +109,7 @@ bun run release patch
 
 The local release script computes the next semantic version from existing Git tags, creates the new `vX.Y.Z` tag, and pushes it to GitHub.
 
-The GitHub Actions release workflow then runs [GoReleaser](https://goreleaser.com/) on that tag. GoReleaser creates the GitHub release and builds/publishes the Docker image to both Docker Hub and GHCR using the repository `Dockerfile`. The release pipeline packages the application source tree into the Docker build context rather than compiling a standalone Bun executable.
+The GitHub Actions release workflow then runs [GoReleaser](https://goreleaser.com/) on that tag. GoReleaser installs dependencies, builds a bundled `main.js`, creates the GitHub release, and builds/publishes the Docker image to both Docker Hub and GHCR by copying only that file into the runtime image.
 
 For a local dry run of the release pipeline:
 
@@ -120,6 +120,7 @@ goreleaser release --snapshot --clean
 For a plain local image build without GoReleaser:
 
 ```sh
+bun run build
 docker build -t obsidian-crdt-sync-server:test .
 ```
 
