@@ -63,19 +63,19 @@ Set environment variables via a `.env` file or export them before running. See `
 
 ## Environment Variables
 
-| Variable                      | Required            | Default                     | Description                                     |
-| ----------------------------- | ------------------- | --------------------------- | ----------------------------------------------- |
-| `AUTH_TOKEN`                  | ✅                  | —                           | Shared secret for WebSocket auth (min 32 chars) |
-| `PORT`                        |                     | `3000`                      | Port to listen on                               |
-| `DATA_DIR`                    |                     | `./data/db`                 | Directory for the SQLite database               |
-| `BACKUP_GIT_INTERVAL_MINUTES` |                     | —                           | Enable periodic Git backup (positive integer)   |
-| `BACKUP_GIT_URL`              | when backup enabled | —                           | HTTPS remote URL                                |
-| `BACKUP_GIT_USERNAME`         | when backup enabled | —                           | Git HTTPS username                              |
-| `BACKUP_GIT_PASSWORD`         | when backup enabled | —                           | Git HTTPS password or token                     |
-| `BACKUP_GIT_BRANCH`           |                     | `main`                      | Branch to push backups to                       |
-| `BACKUP_GIT_WORKTREE_DIR`     |                     | `./data/git`                | Local worktree directory                        |
-| `BACKUP_GIT_AUTHOR_NAME`      |                     | `obsidian-crdt-sync-server` | Git author name for backup commits              |
-| `BACKUP_GIT_AUTHOR_EMAIL`     |                     | `backup@localhost`          | Git author email for backup commits             |
+| Variable                      | Required            | Default                   | Description                                     |
+| ----------------------------- | ------------------- | ------------------------- | ----------------------------------------------- |
+| `AUTH_TOKEN`                  | ✅                  | —                         | Shared secret for WebSocket auth (min 32 chars) |
+| `PORT`                        |                     | `3000`                    | Port to listen on                               |
+| `DATA_DIR`                    |                     | `./data/db`               | Directory for the SQLite database               |
+| `BACKUP_GIT_INTERVAL_MINUTES` |                     | —                         | Enable periodic Git backup (positive integer)   |
+| `BACKUP_GIT_URL`              | when backup enabled | —                         | HTTPS remote URL                                |
+| `BACKUP_GIT_USERNAME`         | when backup enabled | —                         | Git HTTPS username                              |
+| `BACKUP_GIT_PASSWORD`         | when backup enabled | —                         | Git HTTPS password or token                     |
+| `BACKUP_GIT_BRANCH`           |                     | `main`                    | Branch to push backups to                       |
+| `BACKUP_GIT_WORKTREE_DIR`     |                     | `./data/git`              | Local worktree directory                        |
+| `BACKUP_GIT_AUTHOR_NAME`      |                     | `Obsidian Sync`           | Git author name for backup commits              |
+| `BACKUP_GIT_AUTHOR_EMAIL`     |                     | `obsidian-sync@localhost` | Git author email for backup commits             |
 
 ## Health Check
 

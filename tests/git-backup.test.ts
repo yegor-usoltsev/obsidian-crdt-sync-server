@@ -141,6 +141,23 @@ describe("readGitBackupConfig", () => {
       worktreeDir: "./data/git",
     });
   });
+
+  test("defaults the backup commit author to the documented values", () => {
+    expect(
+      readGitBackupConfig(
+        {
+          BACKUP_GIT_INTERVAL_MINUTES: "5",
+          BACKUP_GIT_URL: "https://example.com/repo.git",
+          BACKUP_GIT_USERNAME: "user",
+          BACKUP_GIT_PASSWORD: "token",
+        },
+        "/tmp/data/db",
+      ),
+    ).toMatchObject({
+      authorName: "Obsidian Sync",
+      authorEmail: "obsidian-sync@localhost",
+    });
+  });
 });
 
 describe("runGitBackupOnce", () => {

@@ -30,8 +30,8 @@ export interface GitBackupJob {
 }
 
 const DEFAULT_BACKUP_BRANCH = "main";
-const DEFAULT_BACKUP_AUTHOR_NAME = "obsidian-crdt-sync-server";
-const DEFAULT_BACKUP_AUTHOR_EMAIL = "backup@localhost";
+const DEFAULT_BACKUP_AUTHOR_NAME = "Obsidian Sync";
+const DEFAULT_BACKUP_AUTHOR_EMAIL = "obsidian-sync@localhost";
 const DEFAULT_BACKUP_GIT_WORKTREE_DIR = "./data/git";
 const REMOTE_NAME = "backup";
 const SQLITE_DOCUMENTS_QUERY = `SELECT data FROM "documents" WHERE name = ?`;
