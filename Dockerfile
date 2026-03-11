@@ -1,9 +1,17 @@
-FROM oven/bun:1-alpine
+FROM oven/bun:1.3.10-alpine
+
 WORKDIR /app
+
 RUN apk add --no-cache --update ca-certificates git tzdata
-COPY package.json bun.lock ./
+
+COPY package.json bun.lock .
 RUN bun install --frozen-lockfile --production --ignore-scripts
-COPY src/ ./src/
-VOLUME ["/data"]
+
+COPY src src
+
 EXPOSE 3000
-ENTRYPOINT ["bun", "src/index.ts"]
+
+ENV DATA_DIR=/mnt
+VOLUME ["/mnt"]
+
+ENTRYPOINT ["bun", "start"]
