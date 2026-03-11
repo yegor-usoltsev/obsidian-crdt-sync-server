@@ -1,3 +1,4 @@
+---
 services:
   server:
     image: ghcr.io/yegor-usoltsev/obsidian-crdt-sync-server:latest

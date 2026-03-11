@@ -1,0 +1,43 @@
+---
+version: 2
+
+project_name: obsidian-crdt-sync-server
+
+builds:
+  - id: docker-only
+    skip: true
+
+changelog:
+  disable: true
+
+release:
+  github:
+    owner: yegor-usoltsev
+    name: obsidian-crdt-sync-server
+  name_template: "v{{ .Version }}"
+
+dockers_v2:
+  - id: server-image
+    dockerfile: Dockerfile
+    images:
+      - yusoltsev/obsidian-crdt-sync-server
+      - ghcr.io/yegor-usoltsev/obsidian-crdt-sync-server
+    tags:
+      - "v{{ .Version }}"
+      - "v{{ .Major }}.{{ .Minor }}"
+      - "v{{ .Major }}"
+      - "latest"
+    labels:
+      org.opencontainers.image.created: "{{ .Date }}"
+      org.opencontainers.image.description: "Self-hosted WebSocket server for obsidian-crdt-sync"
+      org.opencontainers.image.name: "{{ .ProjectName }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.source: "{{ .GitURL }}"
+      org.opencontainers.image.version: "{{ .Version }}"
+    extra_files:
+      - ./package.json
+      - ./bun.lock
+      - ./src
+    platforms:
+      - linux/amd64
+      - linux/arm64

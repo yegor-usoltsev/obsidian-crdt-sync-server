@@ -1,8 +1,10 @@
 # obsidian-crdt-sync-server
 
-[![CI](https://github.com/yegor-usoltsev/obsidian-crdt-sync-server/actions/workflows/ci.yml/badge.svg)](https://github.com/yegor-usoltsev/obsidian-crdt-sync-server/actions/workflows/ci.yml)
-[![Docker](https://img.shields.io/badge/docker-ghcr.io-2496ED?logo=docker&logoColor=white)](https://github.com/yegor-usoltsev/obsidian-crdt-sync-server/pkgs/container/obsidian-crdt-sync-server)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Build Status](https://github.com/yegor-usoltsev/obsidian-crdt-sync-server/actions/workflows/ci.yml/badge.svg)](https://github.com/yegor-usoltsev/obsidian-crdt-sync-server/actions)
+[![GitHub Release](https://img.shields.io/github/v/release/yegor-usoltsev/obsidian-crdt-sync-server?sort=semver)](https://github.com/yegor-usoltsev/obsidian-crdt-sync-server/releases)
+[![Docker Image (docker.io)](https://img.shields.io/docker/v/yusoltsev/obsidian-crdt-sync-server?label=docker.io&sort=semver)](https://hub.docker.com/r/yusoltsev/obsidian-crdt-sync-server)
+[![Docker Image (ghcr.io)](https://img.shields.io/docker/v/yusoltsev/obsidian-crdt-sync-server?label=ghcr.io&sort=semver)](https://github.com/yegor-usoltsev/obsidian-crdt-sync-server/pkgs/container/obsidian-crdt-sync-server)
+[![Docker Image Size](https://img.shields.io/docker/image-size/yusoltsev/obsidian-crdt-sync-server?sort=semver&arch=amd64)](https://hub.docker.com/r/yusoltsev/obsidian-crdt-sync-server/tags)
 
 > ⚠️ **Early development** — This server is in active early development. Use at your own risk.
 
@@ -60,19 +62,19 @@ Set environment variables via a `.env` file or export them before running. See `
 
 ## Environment Variables
 
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `AUTH_TOKEN` | ✅ | — | Shared secret for WebSocket auth (min 32 chars) |
-| `PORT` | | `3000` | Port to listen on |
-| `DATA_DIR` | | `./data` | Directory for the SQLite database |
-| `BACKUP_GIT_INTERVAL_MINUTES` | | — | Enable periodic Git backup (positive integer) |
-| `BACKUP_GIT_URL` | when backup enabled | — | HTTPS remote URL |
-| `BACKUP_GIT_USERNAME` | when backup enabled | — | Git HTTPS username |
-| `BACKUP_GIT_PASSWORD` | when backup enabled | — | Git HTTPS password or token |
-| `BACKUP_GIT_BRANCH` | | `main` | Branch to push backups to |
-| `BACKUP_GIT_WORKTREE_DIR` | | `<DATA_DIR>-git-backup` | Local worktree directory |
-| `BACKUP_GIT_AUTHOR_NAME` | | `obsidian-crdt-sync-server` | Git author name for backup commits |
-| `BACKUP_GIT_AUTHOR_EMAIL` | | `backup@localhost` | Git author email for backup commits |
+| Variable                      | Required            | Default                     | Description                                     |
+| ----------------------------- | ------------------- | --------------------------- | ----------------------------------------------- |
+| `AUTH_TOKEN`                  | ✅                  | —                           | Shared secret for WebSocket auth (min 32 chars) |
+| `PORT`                        |                     | `3000`                      | Port to listen on                               |
+| `DATA_DIR`                    |                     | `./data`                    | Directory for the SQLite database               |
+| `BACKUP_GIT_INTERVAL_MINUTES` |                     | —                           | Enable periodic Git backup (positive integer)   |
+| `BACKUP_GIT_URL`              | when backup enabled | —                           | HTTPS remote URL                                |
+| `BACKUP_GIT_USERNAME`         | when backup enabled | —                           | Git HTTPS username                              |
+| `BACKUP_GIT_PASSWORD`         | when backup enabled | —                           | Git HTTPS password or token                     |
+| `BACKUP_GIT_BRANCH`           |                     | `main`                      | Branch to push backups to                       |
+| `BACKUP_GIT_WORKTREE_DIR`     |                     | `<DATA_DIR>-git-backup`     | Local worktree directory                        |
+| `BACKUP_GIT_AUTHOR_NAME`      |                     | `obsidian-crdt-sync-server` | Git author name for backup commits              |
+| `BACKUP_GIT_AUTHOR_EMAIL`     |                     | `backup@localhost`          | Git author email for backup commits             |
 
 ## Health Check
 
@@ -85,6 +87,49 @@ Set environment variables via a `.env` file or export them before running. See `
 - **Data at rest**: Vault data is stored unencrypted in SQLite. Secure the host and the `DATA_DIR` accordingly.
 - **Git backup credentials**: `BACKUP_GIT_PASSWORD` is used as a plain HTTPS password or personal access token. Use a token with minimal required permissions.
 
+## Docker Images
+
+This server is published as a multi-platform Docker image for `linux/amd64` and `linux/arm64`.
+
+Images are available from:
+
+- [yusoltsev/obsidian-crdt-sync-server](https://hub.docker.com/r/yusoltsev/obsidian-crdt-sync-server)
+- [ghcr.io/yegor-usoltsev/obsidian-crdt-sync-server](https://github.com/yegor-usoltsev/obsidian-crdt-sync-server/pkgs/container/obsidian-crdt-sync-server)
+
+## Releasing
+
+Create a release tag from a clean `main` branch:
+
+```sh
+bun run release patch
+# or: bun run release minor
+# or: bun run release major
+```
+
+The local release script computes the next semantic version from existing Git tags, creates the new `vX.Y.Z` tag, and pushes it to GitHub.
+
+The GitHub Actions release workflow then runs [GoReleaser](https://goreleaser.com/) on that tag. GoReleaser creates the GitHub release and builds/publishes the Docker image to both Docker Hub and GHCR using the repository `Dockerfile`. The release pipeline packages the application source tree into the Docker build context rather than compiling a standalone Bun executable.
+
+For a local dry run of the release pipeline:
+
+```sh
+goreleaser release --snapshot --clean
+```
+
+For a plain local image build without GoReleaser:
+
+```sh
+docker build -t obsidian-crdt-sync-server:test .
+```
+
+## Versioning
+
+This project uses [Semantic Versioning](https://semver.org). Release tags use the `vX.Y.Z` format and drive both GitHub releases and Docker image tags.
+
+## Contributing
+
+Pull requests are welcome. For larger changes, open an issue first, especially if the change affects the wire protocol, on-disk storage format, or release packaging.
+
 ## License
 
-[MIT](LICENSE) © [Yegor Usoltsev](https://github.com/yegor-usoltsev)
+[MIT](https://github.com/yegor-usoltsev/obsidian-crdt-sync-server/blob/main/LICENSE)
