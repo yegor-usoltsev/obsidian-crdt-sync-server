@@ -28,16 +28,16 @@ cp .env.example .env
 # edit .env and set AUTH_TOKEN
 ```
 
-Then start the server:
-
-```sh
-docker compose up -d
-```
-
 Generate a token with:
 
 ```sh
 openssl rand -base64 32
+```
+
+Then start the server:
+
+```sh
+docker compose up -d
 ```
 
 ### Docker
