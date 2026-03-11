@@ -1,5 +1,5 @@
 import { Database as BunSQLite } from "bun:sqlite";
-import { SQLite } from "@hocuspocus/extension-sqlite";
+import { Database } from "@hocuspocus/extension-database";
 import { Server } from "@hocuspocus/server";
 import { join } from "pathe";
 import { MetadataExtension } from "./extensions/metadata.ts";
@@ -19,6 +19,13 @@ const SQLITE_SCHEMA = `CREATE TABLE IF NOT EXISTS "documents" (
   "data" blob NOT NULL,
   UNIQUE(name)
 )`;
+const SQLITE_SELECT_DOCUMENT = `
+  SELECT data FROM "documents" WHERE name = ? ORDER BY rowid DESC
+`;
+const SQLITE_UPSERT_DOCUMENT = `
+  INSERT INTO "documents" ("name", "data") VALUES (?, ?)
+    ON CONFLICT(name) DO UPDATE SET data = excluded.data
+`;
 
 export async function createSyncServer({
   authToken,
@@ -42,15 +49,31 @@ export async function createSyncServer({
     sqlite.run("VACUUM");
   }
   sqlite.run(SQLITE_SCHEMA);
-  sqlite.close();
+  const fetchDocument = sqlite.query(SQLITE_SELECT_DOCUMENT);
+  const storeDocument = sqlite.query(SQLITE_UPSERT_DOCUMENT);
 
   return new Server(
     {
       name: "obsidian-crdt-sync",
       quiet: true,
       extensions: [
-        new SQLite({ database }),
+        new Database({
+          fetch: async ({ documentName }) => {
+            const row = fetchDocument.get(documentName) as {
+              data?: Uint8Array | null;
+            } | null;
+            return row?.data ?? null;
+          },
+          store: async ({ documentName, state }) => {
+            storeDocument.run(documentName, state);
+          },
+        }),
         new MetadataExtension({ authToken, maxStatelessPayloadBytes }),
+        {
+          async onDestroy() {
+            sqlite.close();
+          },
+        },
       ],
       async onRequest({ request, response }) {
         if (

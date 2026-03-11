@@ -8,7 +8,7 @@
 
 > ⚠️ **Early development** — This server is in active early development. Use at your own risk.
 
-A self-hosted WebSocket server for the [obsidian-crdt-sync](https://github.com/yegor-usoltsev/obsidian-crdt-sync) Obsidian plugin. Persists vault state in SQLite and optionally backs up to a remote Git repository.
+A self-hosted WebSocket server for the [obsidian-crdt-sync](https://github.com/yegor-usoltsev/obsidian-crdt-sync) Obsidian plugin. Persists vault state in SQLite via Bun's native SQLite APIs and optionally backs up to a remote Git repository.
 
 ## How it works
 
