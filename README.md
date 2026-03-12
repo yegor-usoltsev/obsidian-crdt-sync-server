@@ -109,7 +109,7 @@ bun run release patch
 # or: bun run release major
 ```
 
-The local release script computes the next semantic version from existing Git tags, creates the new `vX.Y.Z` tag, and pushes it to GitHub.
+The local release script computes the next semantic version from existing Git tags, creates the new `X.Y.Z` tag, and pushes it to GitHub.
 
 The GitHub Actions release workflow then runs [GoReleaser](https://goreleaser.com/) on that tag. GoReleaser installs dependencies, builds a bundled `main.js`, creates the GitHub release, and builds/publishes the Docker image to both Docker Hub and GHCR by copying only that file into the runtime image.
 
@@ -128,7 +128,7 @@ docker build -t obsidian-crdt-sync-server:test .
 
 ## Versioning
 
-This project uses [Semantic Versioning](https://semver.org). Release tags use the `vX.Y.Z` format and drive both GitHub releases and Docker image tags.
+This project uses [Semantic Versioning](https://semver.org). Release tags use the plain `X.Y.Z` format and drive both GitHub releases and Docker image tags.
 
 ## Contributing
 

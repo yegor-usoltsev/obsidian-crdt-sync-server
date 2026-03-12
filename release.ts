@@ -23,7 +23,7 @@ async function gitOutput(
 }
 
 function parseVersion(tag: string): [number, number, number] {
-  const match = /^v(\d+)\.(\d+)\.(\d+)$/.exec(tag);
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(tag);
   if (!match) {
     throw new Error(`Unsupported tag format: ${tag}`);
   }
@@ -59,16 +59,21 @@ async function main() {
   await gitOutput(["pull", "--ff-only", "origin", "main"]);
 
   const latestTag =
-    (await gitOutput(["tag", "-l", "v*", "--sort=-v:refname"], true))
+    (
+      await gitOutput(
+        ["tag", "-l", "[0-9]*.[0-9]*.[0-9]*", "--sort=-v:refname"],
+        true,
+      )
+    )
       .split("\n")
-      .find(Boolean) ?? "v0.0.0";
+      .find(Boolean) ?? "0.0.0";
   const nextVersion = bumpVersion(parseVersion(latestTag), releaseType);
-  const nextTag = `v${nextVersion}`;
+  const nextTag = nextVersion;
 
   await gitOutput(["tag", nextTag]);
   await gitOutput(["push", "origin", nextTag]);
 
-  console.log(`Released ${nextTag}`);
+  console.log(`Released ${nextVersion}`);
 }
 
 await main();
