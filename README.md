@@ -8,14 +8,16 @@
 
 > ⚠️ **Early development** — This server is in active early development. Use at your own risk.
 
-A self-hosted WebSocket server for the [obsidian-crdt-sync](https://github.com/yegor-usoltsev/obsidian-crdt-sync) Obsidian plugin. Persists vault state in SQLite via Bun's native SQLite APIs and optionally backs up to a remote Git repository.
+A self-hosted sync backend for the [obsidian-crdt-sync](https://github.com/yegor-usoltsev/obsidian-crdt-sync) Obsidian plugin. It keeps your vault state in one place so your devices can stay in sync without giving your notes to a third-party service.
 
-## How it works
+## What you get
 
-- Clients authenticate over the WebSocket handshake using a shared `AUTH_TOKEN`. The token is checked with a constant-time comparison to prevent timing attacks. IPs that fail authentication more than 5 times per minute are rate-limited.
-- Vault content (text and binary files) is stored as [Yjs](https://github.com/yjs/yjs) documents in a SQLite database. Each document is persisted to disk and loaded into memory on first access.
-- File metadata (paths, renames, deletes) is managed through a server-authoritative ordered event log. The server validates every metadata operation, rejects invalid or conflicting operations, and broadcasts commits to all connected clients.
-- The optional Git backup job periodically materializes the full vault to a local worktree and pushes commits to a remote HTTPS repository.
+- **A real-time sync hub for every device**: connect desktop, mobile, and other clients to the same vault state.
+- **Support for the full vault, not just note text**: notes, attachments, folder structure, renames, moves, and deletes are all part of the sync model.
+- **SQLite-backed vault storage**: the latest synced state is persisted locally, so the server keeps your vault between restarts.
+- **Consistent file identity across clients**: the server validates structural changes so two devices do not quietly drift into conflicting paths or broken renames.
+- **Optional Git backups**: you can periodically materialize the vault into a normal Git repository and push it to a remote for history and disaster recovery.
+- **Straightforward self-hosting**: run it on your own infrastructure behind a reverse proxy, without relying on a third-party sync service.
 
 ## Usage
 
