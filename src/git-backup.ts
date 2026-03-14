@@ -637,12 +637,14 @@ export function createGitBackupJob(
     running = (async () => {
       try {
         const result = await runGitBackupOnce(config, server);
-        log("info", "Git backup finished", {
-          reason,
-          result,
-          branch: config.branch,
-          worktreeDir: config.worktreeDir,
-        });
+        if (result !== "noop") {
+          log("info", "Git backup finished", {
+            reason,
+            result,
+            branch: config.branch,
+            worktreeDir: config.worktreeDir,
+          });
+        }
       } catch (error) {
         log("error", "Git backup failed", {
           reason,
