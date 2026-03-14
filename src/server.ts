@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { Database } from "@hocuspocus/extension-database";
 import { Server } from "@hocuspocus/server";
 import { join } from "pathe";
-import { MetadataExtension } from "./extensions/metadata.ts";
+import { MetadataExtension } from "./metadata.ts";
 
 export interface SyncServerConfig {
   authToken: string;

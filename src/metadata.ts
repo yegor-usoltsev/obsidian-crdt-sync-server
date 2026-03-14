@@ -12,14 +12,14 @@ import {
 } from "@hocuspocus/server";
 import { messageYjsSyncStep2, messageYjsUpdate } from "y-protocols/sync";
 import * as Y from "yjs";
-import { log } from "../log.ts";
+import { log } from "./log.ts";
 import {
   buildMetadataCommitMessage,
   buildMetadataRejectMessage,
   buildMetadataRejectMessageFromRaw,
   type MetadataOpRequest,
   normalizeMetadataOpRequest,
-} from "../messages.ts";
+} from "./messages.ts";
 import {
   type AppliedMetadataOp,
   applyMetadataOp,
@@ -29,8 +29,8 @@ import {
   META_DOCUMENT_NAME,
   METADATA_INIT_ORIGIN,
   METADATA_OP_ORIGIN,
-} from "../meta-doc.ts";
-import { isIgnoredSyncPath } from "../sync-ignore.ts";
+} from "./meta-doc.ts";
+import { isIgnoredSyncPath } from "./sync-ignore.ts";
 
 export interface MetadataExtensionConfiguration {
   authToken: string;
