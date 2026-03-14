@@ -17,10 +17,8 @@ builds:
 
 changelog:
   sort: asc
-  abbrev: -1
   filters:
     exclude:
-      - "^Release:"
       - "^Merge "
 
 release:
@@ -30,18 +28,8 @@ release:
   name_template: "{{ .Version }}"
   footer: |
     ## Docker images
-
-    Docker Hub:
     - [`yusoltsev/obsidian-crdt-sync-server:{{ .Version }}`](https://hub.docker.com/r/yusoltsev/obsidian-crdt-sync-server/tags?name={{ .Version }})
-    - [`yusoltsev/obsidian-crdt-sync-server:{{ .Major }}.{{ .Minor }}`](https://hub.docker.com/r/yusoltsev/obsidian-crdt-sync-server/tags?name={{ .Major }}.{{ .Minor }})
-    - [`yusoltsev/obsidian-crdt-sync-server:{{ .Major }}`](https://hub.docker.com/r/yusoltsev/obsidian-crdt-sync-server/tags?name={{ .Major }})
-    - [`yusoltsev/obsidian-crdt-sync-server:latest`](https://hub.docker.com/r/yusoltsev/obsidian-crdt-sync-server/tags?name=latest)
-
-    GHCR:
     - [`ghcr.io/yegor-usoltsev/obsidian-crdt-sync-server:{{ .Version }}`](https://github.com/yegor-usoltsev/obsidian-crdt-sync-server/pkgs/container/obsidian-crdt-sync-server)
-    - [`ghcr.io/yegor-usoltsev/obsidian-crdt-sync-server:{{ .Major }}.{{ .Minor }}`](https://github.com/yegor-usoltsev/obsidian-crdt-sync-server/pkgs/container/obsidian-crdt-sync-server)
-    - [`ghcr.io/yegor-usoltsev/obsidian-crdt-sync-server:{{ .Major }}`](https://github.com/yegor-usoltsev/obsidian-crdt-sync-server/pkgs/container/obsidian-crdt-sync-server)
-    - [`ghcr.io/yegor-usoltsev/obsidian-crdt-sync-server:latest`](https://github.com/yegor-usoltsev/obsidian-crdt-sync-server/pkgs/container/obsidian-crdt-sync-server)
   extra_files:
     - glob: ./main.js
 
