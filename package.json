@@ -15,10 +15,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@hocuspocus/extension-database": "3.4.4",
     "@hocuspocus/server": "3.4.4",
-    "ignore": "7.0.5",
-    "pathe": "2.0.3",
     "valibot": "1.2.0",
     "yjs": "13.6.29"
   },

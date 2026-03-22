@@ -1,60 +1,72 @@
-import { createGitBackupJob, readGitBackupConfig } from "./git-backup.ts";
-import { log } from "./log.ts";
-import { createSyncServer } from "./server.ts";
+/**
+ * CRDT Sync Server - Main entry point.
+ */
 
-const port = Number(Bun.env.PORT ?? 3000);
-const authToken = Bun.env.AUTH_TOKEN;
-const dataDir = Bun.env.DATA_DIR ?? "./data/db";
+import { join } from "node:path";
+import { createGitBackupJob, readGitBackupConfig } from "./backup/git-backup";
+import { createHistoryStore } from "./history/history-store";
+import { createMetadataRegistry } from "./metadata-registry/registry";
+import { openDatabase } from "./shared/database";
+import { log } from "./shared/log";
+import { ensureTextDocTable } from "./text-doc-service/text-doc-service";
+import { validateTokenConfig } from "./transport/auth";
+import { createSyncServer } from "./transport/server";
 
-const MIN_AUTH_TOKEN_LENGTH = 32;
+const PORT = Number(process.env.PORT ?? 3000);
+const AUTH_TOKEN = process.env.AUTH_TOKEN ?? "";
+const DATA_DIR = process.env.DATA_DIR ?? "./data";
 
-if (!authToken) {
-  log("error", "AUTH_TOKEN environment variable is required");
+// Validate auth token
+const tokenError = validateTokenConfig(AUTH_TOKEN);
+if (tokenError) {
+  log("error", `Invalid AUTH_TOKEN: ${tokenError}`);
   process.exit(1);
 }
 
-if (authToken.length < MIN_AUTH_TOKEN_LENGTH) {
-  log(
-    "error",
-    "AUTH_TOKEN is too short — use at least 32 characters of randomness",
-    {
-      length: authToken.length,
-      minimum: MIN_AUTH_TOKEN_LENGTH,
-    },
-  );
-  process.exit(1);
-}
+// Initialize database
+const dbPath = join(DATA_DIR, "sync.db");
+const db = openDatabase(dbPath);
 
-const gitBackupConfig = readGitBackupConfig(Bun.env, dataDir);
-const server = await createSyncServer({
-  authToken,
-  dataDir,
+// Ensure text document table exists
+ensureTextDocTable(db);
+
+// Initialize subsystems
+const registry = createMetadataRegistry(db);
+const _historyStore = createHistoryStore(db);
+
+// Create and start server
+const server = createSyncServer({
+  port: PORT,
+  authToken: AUTH_TOKEN,
+  dataDir: DATA_DIR,
+  db,
 });
-const gitBackup = gitBackupConfig
-  ? createGitBackupJob(gitBackupConfig, server)
-  : null;
 
-async function shutdown(signal: string): Promise<void> {
-  log("info", "Shutting down", { signal });
-  try {
-    await Promise.all([server.destroy(), gitBackup?.stop()]);
-  } catch (err) {
-    log("error", "Error during shutdown", { error: String(err) });
-  }
+server.start().then(() => {
+  log("info", "Server ready", { port: PORT, dataDir: DATA_DIR });
+});
+
+// Optional Git backup
+const backupConfig = readGitBackupConfig();
+let backupJob: ReturnType<typeof createGitBackupJob> | null = null;
+if (backupConfig) {
+  backupJob = createGitBackupJob(backupConfig, registry, db, DATA_DIR);
+  backupJob.start();
+}
+
+// Graceful shutdown
+function shutdown() {
+  log("info", "Shutting down...");
+  backupJob?.stop();
+  server.stop();
+  db.close();
   process.exit(0);
 }
 
-process.on("SIGTERM", () => void shutdown("SIGTERM"));
-process.on("SIGINT", () => void shutdown("SIGINT"));
-
-process.on("unhandledRejection", (reason: unknown) => {
-  log("error", "Unhandled promise rejection", { reason: String(reason) });
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);
+process.on("unhandledRejection", (err) => {
+  log("error", "Unhandled rejection", {
+    error: err instanceof Error ? err.message : String(err),
+  });
 });
-
-await server.listen(port);
-log("info", "Server started", {
-  port,
-  dataDir,
-  gitBackupEnabled: gitBackupConfig !== null,
-});
-gitBackup?.start();

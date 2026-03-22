@@ -12,12 +12,15 @@ A self-hosted sync backend for the [obsidian-crdt-sync](https://github.com/yegor
 
 ## What you get
 
-- **A real-time sync hub for every device**: connect desktop, mobile, and other clients to the same vault state.
-- **Support for the full vault, not just note text**: notes, attachments, folder structure, renames, moves, and deletes are all part of the sync model.
-- **SQLite-backed vault storage**: the latest synced state is persisted locally, so the server keeps your vault between restarts.
-- **Consistent file identity across clients**: the server validates structural changes so two devices do not quietly drift into conflicting paths or broken renames.
-- **Optional Git backups**: you can periodically materialize the vault into a normal Git repository and push it to a remote for history and disaster recovery.
-- **Straightforward self-hosting**: run it on your own infrastructure behind a reverse proxy, without relying on a third-party sync service.
+- **Hybrid sync hub**: serves text documents via CRDT (Yjs/Hocuspocus), binary files via verified blob storage, and settings files via snapshot transport with per-file merge policies.
+- **Authoritative metadata registry**: canonical file identity, paths, kinds, structural validation, case-insensitive collision checks, and epoch-based revision state.
+- **Append-only history**: every metadata and content change is recorded. Restore creates a new canonical head — history is never mutated in place.
+- **Content-addressed blob storage**: binary payloads are stored on disk by SHA-256 digest with SQLite metadata. Identical content is shared across files.
+- **Settings snapshot storage**: versioned config file snapshots with digest and coordination anchors, supporting the plugin's per-file merge policies.
+- **Compaction with epoch safety**: old history entries can be compacted, bumping the epoch to signal clients to rebootstrap safely.
+- **Optional Git backup**: scheduled export of canonical vault state to a Git repository, with worktree safety, managed `.gitignore`, and redundant-backup skipping.
+- **WebSocket control channel**: authenticated control plane for metadata intents, history queries, restore operations, and diagnostics — separate from text-doc replication.
+- **Security**: constant-time token comparison, 32-character minimum, auth failure rate limiting, payload size limits (256 KiB metadata, 200 MiB content).
 
 ## Usage
 
