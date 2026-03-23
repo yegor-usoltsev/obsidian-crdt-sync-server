@@ -80,6 +80,7 @@ export interface BlobRecord {
 
 /** Settings snapshot record. */
 export interface SettingsSnapshot {
+  fileId: FileId;
   configPath: string;
   digest: string;
   size: number;

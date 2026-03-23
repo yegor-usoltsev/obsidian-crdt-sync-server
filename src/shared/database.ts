@@ -54,7 +54,8 @@ export function openDatabase(dbPath: string): Database {
 			operation_id TEXT NOT NULL,
 			timestamp INTEGER NOT NULL,
 			revision INTEGER NOT NULL,
-			epoch TEXT NOT NULL
+			epoch TEXT NOT NULL,
+			intent_fingerprint TEXT
 		)
 	`);
 
@@ -82,7 +83,7 @@ export function openDatabase(dbPath: string): Database {
 		ON blobs (digest)
 	`);
 
-  // Settings snapshots
+  // Settings snapshots (legacy table kept for migration safety)
   db.run(`
 		CREATE TABLE IF NOT EXISTS settings_snapshots (
 			config_path TEXT NOT NULL,

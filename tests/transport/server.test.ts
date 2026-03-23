@@ -1,6 +1,14 @@
 import type { Database } from "bun:sqlite";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { createBlobStore } from "../../src/blob-store/blob-store";
+import { createHistoryStore } from "../../src/history/history-store";
+import { createMetadataRegistry } from "../../src/metadata-registry/registry";
+import { createSettingsStore } from "../../src/settings-store/settings-store";
 import { openDatabase } from "../../src/shared/database";
+import {
+  createTextDocService,
+  ensureTextDocTable,
+} from "../../src/text-doc-service/text-doc-service";
 import { createSyncServer, type SyncServer } from "../../src/transport/server";
 
 describe("sync server", () => {
@@ -8,14 +16,27 @@ describe("sync server", () => {
   let server: SyncServer;
   const AUTH_TOKEN = "a".repeat(32);
   let baseUrl: string;
+  const dataDir = "/tmp/crdt-sync-test-server";
 
   beforeAll(async () => {
     db = openDatabase(":memory:");
+    ensureTextDocTable(db);
+    const registry = createMetadataRegistry(db);
+    const historyStore = createHistoryStore(db);
+    const blobStore = await createBlobStore(db, dataDir);
+    const settingsStore = createSettingsStore(db, dataDir);
+    const textDocService = createTextDocService({ db, authToken: AUTH_TOKEN });
+
     server = createSyncServer({
       port: 0, // random port
       authToken: AUTH_TOKEN,
-      dataDir: "/tmp/crdt-sync-test",
+      dataDir,
       db,
+      registry,
+      historyStore,
+      blobStore,
+      settingsStore,
+      textDocService,
     });
     await server.start();
     baseUrl = `http://localhost:${server.port}`;

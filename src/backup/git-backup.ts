@@ -1,13 +1,16 @@
 /**
  * Optional scheduled Git backup: canonical vault export with
- * worktree safety and redundant-backup skipping.
+ * worktree safety, content materialization, and redundant-backup skipping.
  */
 
 import type { Database } from "bun:sqlite";
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { $ } from "bun";
+import * as Y from "yjs";
+import type { BlobStore } from "../blob-store/blob-store";
 import type { MetadataRegistry } from "../metadata-registry/registry";
+import type { SettingsStore } from "../settings-store/settings-store";
 import { log } from "../shared/log";
 
 export interface GitBackupConfig {
@@ -29,6 +32,27 @@ export interface GitBackupJob {
   start(): void;
   stop(): void;
   runNow(): Promise<void>;
+}
+
+/**
+ * Validate that worktree and data dir don't overlap.
+ * Returns an error message if they do, null if safe.
+ */
+export function validateWorktreeOverlap(
+  worktreePath: string,
+  dataDir: string,
+): string | null {
+  const absWorktree = resolve(worktreePath);
+  const absData = resolve(dataDir);
+
+  if (
+    absWorktree === absData ||
+    absWorktree.startsWith(`${absData}/`) ||
+    absData.startsWith(`${absWorktree}/`)
+  ) {
+    return `Worktree path "${worktreePath}" overlaps with data directory "${dataDir}"`;
+  }
+  return null;
 }
 
 export function readGitBackupConfig(): GitBackupConfig | null {
@@ -74,11 +98,21 @@ export function readGitBackupConfig(): GitBackupConfig | null {
   };
 }
 
+export interface GitBackupDeps {
+  registry: MetadataRegistry;
+  db: Database;
+  dataDir: string;
+  blobStore: BlobStore;
+  settingsStore: SettingsStore;
+}
+
 export function createGitBackupJob(
   config: GitBackupConfig,
   registry: MetadataRegistry,
-  _db: Database,
-  _dataDir: string,
+  db: Database,
+  dataDir: string,
+  blobStore?: BlobStore,
+  settingsStore?: SettingsStore,
 ): GitBackupJob {
   let timer: ReturnType<typeof setInterval> | null = null;
   let lastTreeHash: string | null = null;
@@ -88,6 +122,14 @@ export function createGitBackupJob(
 
     try {
       const worktree = config.worktreePath;
+
+      // Validate worktree/data-dir overlap
+      const overlapError = validateWorktreeOverlap(worktree, dataDir);
+      if (overlapError) {
+        log("error", overlapError);
+        return;
+      }
+
       await mkdir(worktree, { recursive: true });
 
       // Initialize git repo if needed
@@ -101,6 +143,7 @@ export function createGitBackupJob(
 
       // Export canonical vault tree
       const activeFiles = registry.listActiveFiles();
+      const activePaths = new Set(activeFiles.map((f) => f.path));
 
       // Write managed .gitignore
       const gitignore = [
@@ -127,8 +170,50 @@ export function createGitBackupJob(
         return;
       }
 
-      // TODO: Materialize file content from blob store and text doc service
-      // For now, just stage and commit metadata
+      // Materialize file content
+      for (const file of activeFiles) {
+        const filePath = join(worktree, file.path);
+        await mkdir(dirname(filePath), { recursive: true });
+
+        if (file.kind === "text") {
+          // Extract text from Y.Doc
+          const row = db
+            .query("SELECT data FROM text_documents WHERE file_id = ?")
+            .get(file.fileId) as { data: Buffer } | null;
+          if (row?.data) {
+            const doc = new Y.Doc();
+            Y.applyUpdate(doc, new Uint8Array(row.data));
+            const text = doc.getText("default").toString();
+            await writeFile(filePath, text);
+          }
+        } else if (file.kind === "binary" && blobStore) {
+          const result = await blobStore.retrieve(file.fileId);
+          if (result) {
+            await writeFile(filePath, result.content);
+          }
+        } else if (file.kind === "directory") {
+          await mkdir(filePath, { recursive: true });
+        }
+      }
+
+      // Materialize settings files
+      if (settingsStore) {
+        const settingsFileIds = settingsStore.listFileIds();
+        for (const fileId of settingsFileIds) {
+          const fileMeta = registry.getFile(fileId);
+          if (fileMeta && !fileMeta.deleted) {
+            const result = settingsStore.getLatest(fileId);
+            if (result) {
+              const filePath = join(worktree, fileMeta.path);
+              await mkdir(dirname(filePath), { recursive: true });
+              await writeFile(filePath, result.content);
+            }
+          }
+        }
+      }
+
+      // Remove files no longer active in the registry
+      await removeStaleFiles(worktree, activePaths);
 
       await $`git -C ${worktree} add -A`.quiet();
 
@@ -179,4 +264,47 @@ export function createGitBackupJob(
 
     runNow: runBackup,
   };
+}
+
+/**
+ * Remove files from worktree that are no longer active in the registry.
+ * Preserves .git directory and .gitignore.
+ */
+async function removeStaleFiles(
+  worktree: string,
+  activePaths: Set<string>,
+): Promise<void> {
+  const managed = new Set([".git", ".gitignore"]);
+
+  async function walkAndRemove(dir: string, prefix: string): Promise<void> {
+    let entries: import("node:fs").Dirent[];
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
+
+      if (managed.has(entry.name) && !prefix) continue;
+
+      if (entry.isDirectory()) {
+        await walkAndRemove(join(dir, entry.name), relativePath);
+        // Remove empty directories
+        try {
+          const remaining = await readdir(join(dir, entry.name));
+          if (remaining.length === 0) {
+            await rm(join(dir, entry.name), { recursive: true });
+          }
+        } catch {
+          // ignore
+        }
+      } else if (!activePaths.has(relativePath)) {
+        await rm(join(dir, entry.name));
+      }
+    }
+  }
+
+  await walkAndRemove(worktree, "");
 }

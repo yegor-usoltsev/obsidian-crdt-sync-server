@@ -45,6 +45,17 @@ export function createMetadataRegistry(db: Database): MetadataRegistry {
         .get(intent.operationId) as RawHistoryRow | null;
 
       if (existingRow) {
+        // Compare payload fingerprint if stored
+        if (existingRow.intent_fingerprint) {
+          const incomingFingerprint = computeIntentFingerprint(intent);
+          if (incomingFingerprint !== existingRow.intent_fingerprint) {
+            return {
+              operationId: intent.operationId,
+              reason: "operation ID reused with different payload",
+            };
+          }
+        }
+
         // Replay: return original result without new commit
         return {
           operationId: existingRow.operation_id,
@@ -221,6 +232,7 @@ function processCreate(
     operationId: intent.operationId,
     revision,
     epoch,
+    intentFingerprint: computeIntentFingerprint(intent),
   });
 
   return {
@@ -265,6 +277,17 @@ function processRename(
     return {
       operationId: intent.operationId,
       reason: "file not found or already deleted",
+    };
+  }
+
+  // Content-anchor validation: reject stale intents
+  if (
+    intent.contentAnchor !== undefined &&
+    intent.contentAnchor < file.content_anchor
+  ) {
+    return {
+      operationId: intent.operationId,
+      reason: "stale content anchor",
     };
   }
 
@@ -337,6 +360,7 @@ function processRename(
     operationId: intent.operationId,
     revision,
     epoch,
+    intentFingerprint: computeIntentFingerprint(intent),
   });
 
   return {
@@ -373,6 +397,17 @@ function processDelete(
     };
   }
 
+  // Content-anchor validation: reject stale intents
+  if (
+    intent.contentAnchor !== undefined &&
+    intent.contentAnchor < file.content_anchor
+  ) {
+    return {
+      operationId: intent.operationId,
+      reason: "stale content anchor",
+    };
+  }
+
   const now = Date.now();
   const revision = nextRevision(db);
   const epoch = getEpoch(db);
@@ -405,8 +440,8 @@ function processDelete(
 
   db.run(
     `INSERT INTO history (file_id, operation_type, path, kind, content_digest, content_size,
-		  content_anchor, client_id, operation_id, timestamp, revision, epoch)
-		 VALUES (?, 'delete', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		  content_anchor, client_id, operation_id, timestamp, revision, epoch, intent_fingerprint)
+		 VALUES (?, 'delete', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       intent.fileId,
       file.path,
@@ -419,6 +454,7 @@ function processDelete(
       Date.now(),
       revision,
       epoch,
+      computeIntentFingerprint(intent),
     ],
   );
 
@@ -450,6 +486,7 @@ interface RawHistoryRow {
   timestamp: number;
   revision: number;
   epoch: string;
+  intent_fingerprint: string | null;
 }
 
 interface RawFileRow {
@@ -495,6 +532,21 @@ function validatePath(path: string): string | null {
   return null;
 }
 
+function computeIntentFingerprint(intent: MetadataIntent): string {
+  const canonical = JSON.stringify([
+    intent.type,
+    intent.fileId ?? null,
+    intent.path ?? null,
+    intent.newPath ?? null,
+    intent.kind ?? null,
+    intent.contentAnchor ?? null,
+    intent.contentDigest ?? null,
+  ]);
+  const hasher = new Bun.CryptoHasher("sha256");
+  hasher.update(canonical);
+  return hasher.digest("hex");
+}
+
 function recordHistory(
   db: Database,
   entry: {
@@ -507,12 +559,13 @@ function recordHistory(
     operationId: string;
     revision: number;
     epoch: string;
+    intentFingerprint?: string;
   },
 ): void {
   db.run(
     `INSERT INTO history (file_id, operation_type, path, kind, content_digest, content_size,
-		  content_anchor, client_id, operation_id, timestamp, revision, epoch)
-		 VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?)`,
+		  content_anchor, client_id, operation_id, timestamp, revision, epoch, intent_fingerprint)
+		 VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)`,
     [
       entry.fileId,
       entry.operationType,
@@ -524,6 +577,7 @@ function recordHistory(
       Date.now(),
       entry.revision,
       entry.epoch,
+      entry.intentFingerprint ?? null,
     ],
   );
 }

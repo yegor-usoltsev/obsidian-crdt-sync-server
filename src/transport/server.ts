@@ -4,6 +4,7 @@
  */
 
 import type { Database } from "bun:sqlite";
+import type { Hocuspocus } from "@hocuspocus/server";
 import type { Server as BunServer, ServerWebSocket } from "bun";
 import type { BlobStore } from "../blob-store/blob-store";
 import type { HistoryStore } from "../history/history-store";
@@ -24,10 +25,11 @@ export interface SyncServerConfig {
   authToken: string;
   dataDir: string;
   db: Database;
-  registry?: MetadataRegistry;
-  historyStore?: HistoryStore;
-  blobStore?: BlobStore;
-  settingsStore?: SettingsStore;
+  registry: MetadataRegistry;
+  historyStore: HistoryStore;
+  blobStore: BlobStore;
+  settingsStore: SettingsStore;
+  textDocService: Hocuspocus;
 }
 
 export interface SyncServer {
@@ -40,6 +42,7 @@ interface WsData {
   authenticated: boolean;
   clientId?: string;
   subscribedRevision?: number;
+  docFileId?: string;
 }
 
 /**
@@ -111,6 +114,46 @@ export function createSyncServer(config: SyncServerConfig): SyncServer {
             return new Response("WebSocket upgrade failed", { status: 500 });
           }
 
+          // WebSocket upgrade for text-doc sync (/docs/:fileId)
+          if (url.pathname.startsWith("/docs/")) {
+            const fileId = decodeURIComponent(
+              url.pathname.slice("/docs/".length),
+            );
+            if (!fileId) {
+              return new Response("Bad Request: missing file ID", {
+                status: 400,
+              });
+            }
+
+            const docSource =
+              req.headers.get("x-forwarded-for") ??
+              req.headers.get("x-real-ip") ??
+              "unknown";
+
+            if (isRateLimited(docSource)) {
+              return new Response("Too Many Requests", { status: 429 });
+            }
+
+            const docTokenParam = url.searchParams.get("token");
+            const docAuthHeader = req.headers.get("authorization");
+            const docToken =
+              docTokenParam ??
+              (docAuthHeader?.startsWith("Bearer ")
+                ? docAuthHeader.slice(7)
+                : null);
+
+            if (!docToken || !verifyToken(docToken, config.authToken)) {
+              if (docToken) recordAuthFailure(docSource);
+              return new Response("Unauthorized", { status: 401 });
+            }
+
+            const docUpgraded = srv.upgrade(req, {
+              data: { authenticated: true, docFileId: fileId },
+            });
+            if (docUpgraded) return undefined as unknown as Response;
+            return new Response("WebSocket upgrade failed", { status: 500 });
+          }
+
           // Auth check for HTTP endpoints
           const source =
             req.headers.get("x-forwarded-for") ??
@@ -146,6 +189,25 @@ export function createSyncServer(config: SyncServerConfig): SyncServer {
 
         websocket: {
           open(ws) {
+            if (ws.data.docFileId) {
+              // Route to Hocuspocus for text-doc sync.
+              // Hocuspocus expects a Node.js ws WebSocket; Bun's ServerWebSocket
+              // needs a compatibility shim for the event-emitter API.
+              try {
+                config.textDocService.handleConnection(
+                  ws as unknown as import("ws").WebSocket,
+                  undefined as unknown as import("http").IncomingMessage,
+                  { documentName: ws.data.docFileId },
+                );
+              } catch (err) {
+                log("error", "Hocuspocus handleConnection failed", {
+                  error: err instanceof Error ? err.message : String(err),
+                  fileId: ws.data.docFileId,
+                });
+                ws.close();
+              }
+              return;
+            }
             wsClients.add(ws);
             log("info", "WebSocket client connected");
           },
@@ -164,14 +226,6 @@ export function createSyncServer(config: SyncServerConfig): SyncServer {
                 break;
 
               case "metadata.intent": {
-                if (!config.registry) {
-                  send(ws, {
-                    action: "error",
-                    message: "registry not available",
-                  });
-                  return;
-                }
-
                 const result = config.registry.processIntent(parsed.payload);
 
                 if ("reason" in result) {
@@ -207,7 +261,7 @@ export function createSyncServer(config: SyncServerConfig): SyncServer {
               case "metadata.subscribe": {
                 ws.data.subscribedRevision = parsed.sinceRevision ?? 0;
                 // Send any commits since the requested revision
-                if (config.historyStore && parsed.sinceRevision !== undefined) {
+                if (parsed.sinceRevision !== undefined) {
                   const entries = config.historyStore.getHistorySince(
                     parsed.sinceRevision,
                   );
@@ -231,13 +285,6 @@ export function createSyncServer(config: SyncServerConfig): SyncServer {
               }
 
               case "history.list": {
-                if (!config.historyStore) {
-                  send(ws, {
-                    action: "error",
-                    message: "history not available",
-                  });
-                  return;
-                }
                 const entries = config.historyStore.getFileHistory(
                   parsed.fileId,
                 );
@@ -251,13 +298,6 @@ export function createSyncServer(config: SyncServerConfig): SyncServer {
               }
 
               case "history.restore": {
-                if (!config.historyStore) {
-                  send(ws, {
-                    action: "error",
-                    message: "history not available",
-                  });
-                  return;
-                }
                 const restored = config.historyStore.restore(
                   parsed.fileId,
                   parsed.historyEntryId,
@@ -280,13 +320,6 @@ export function createSyncServer(config: SyncServerConfig): SyncServer {
               }
 
               case "diagnostics.request": {
-                if (!config.registry) {
-                  send(ws, {
-                    action: "error",
-                    message: "registry not available",
-                  });
-                  return;
-                }
                 const state = config.registry.getState();
                 const files = config.registry.listActiveFiles();
                 ws.send(
@@ -332,10 +365,6 @@ async function handleBlobRequest(
   url: URL,
   config: SyncServerConfig,
 ): Promise<Response> {
-  if (!config.blobStore) {
-    return new Response("Blob store not available", { status: 503 });
-  }
-
   // /blobs/check/:digest — content-addressed existence check
   if (url.pathname.startsWith("/blobs/check/")) {
     const digest = decodeURIComponent(url.pathname.split("/")[3] ?? "");
@@ -352,6 +381,12 @@ async function handleBlobRequest(
   }
 
   if (req.method === "PUT") {
+    // Validate fileId exists in registry
+    const fileMeta = config.registry.getFile(fileId);
+    if (!fileMeta) {
+      return new Response("Not Found", { status: 404 });
+    }
+
     const contentLength = Number(req.headers.get("content-length") ?? 0);
     if (contentLength > PAYLOAD_LIMITS.content) {
       return new Response("Payload Too Large", { status: 413 });
@@ -375,9 +410,7 @@ async function handleBlobRequest(
       return new Response("Bad Request: digest mismatch", { status: 400 });
     }
 
-    // Get current content anchor from registry
-    const fileMeta = config.registry?.getFile(fileId);
-    const contentAnchor = (fileMeta?.contentAnchor ?? 0) + 1;
+    const contentAnchor = fileMeta.contentAnchor + 1;
 
     const record = await config.blobStore.store(
       fileId,
@@ -387,14 +420,12 @@ async function handleBlobRequest(
     );
 
     // Update registry content metadata
-    if (config.registry) {
-      config.registry.updateContentMetadata(
-        fileId,
-        digest,
-        content.byteLength,
-        "blob-upload",
-      );
-    }
+    config.registry.updateContentMetadata(
+      fileId,
+      digest,
+      content.byteLength,
+      "blob-upload",
+    );
 
     return new Response(JSON.stringify(record), {
       headers: { "Content-Type": "application/json" },
@@ -436,23 +467,41 @@ async function handleSettingsRequest(
   url: URL,
   config: SyncServerConfig,
 ): Promise<Response> {
-  if (!config.settingsStore) {
-    return new Response("Settings store not available", { status: 503 });
-  }
-
   // /settings/:configPath
   const configPath = decodeURIComponent(
     url.pathname.slice("/settings/".length),
   );
   if (!configPath) {
     if (req.method === "GET") {
-      // List all tracked settings paths
-      const paths = config.settingsStore.listPaths();
-      return new Response(JSON.stringify({ paths }), {
+      // List all tracked settings fileIds
+      const fileIds = config.settingsStore.listFileIds();
+      return new Response(JSON.stringify({ fileIds }), {
         headers: { "Content-Type": "application/json" },
       });
     }
     return new Response("Bad Request", { status: 400 });
+  }
+
+  // Resolve config_path → fileId via registry
+  function resolveFileId(): string | null {
+    const existing = config.registry.getFileByPath(configPath);
+    return existing?.fileId ?? null;
+  }
+
+  function resolveOrCreateFileId(): string {
+    const existing = config.registry.getFileByPath(configPath);
+    if (existing) return existing.fileId;
+
+    // Create a file identity for this config path
+    const result = config.registry.processIntent({
+      type: "create",
+      clientId: "settings-upload",
+      operationId: crypto.randomUUID(),
+      path: configPath,
+      kind: "text",
+    });
+    if ("fileId" in result) return result.fileId;
+    throw new Error(`Failed to create file identity: ${result.reason}`);
   }
 
   if (req.method === "PUT") {
@@ -479,9 +528,18 @@ async function handleSettingsRequest(
       return new Response("Bad Request: digest mismatch", { status: 400 });
     }
 
-    const contentAnchor = Number(req.headers.get("x-content-anchor") ?? "1");
+    // Resolve or create file identity, advance anchor through registry
+    const fileId = resolveOrCreateFileId();
+    const updated = config.registry.updateContentMetadata(
+      fileId,
+      digest,
+      content.byteLength,
+      "settings-upload",
+    );
+    const contentAnchor = updated?.contentAnchor ?? 1;
+
     const snapshot = config.settingsStore.store(
-      configPath,
+      fileId,
       content,
       digest,
       contentAnchor,
@@ -493,7 +551,11 @@ async function handleSettingsRequest(
   }
 
   if (req.method === "GET") {
-    const result = config.settingsStore.getLatest(configPath);
+    const fileId = resolveFileId();
+    if (!fileId) {
+      return new Response("Not Found", { status: 404 });
+    }
+    const result = config.settingsStore.getLatest(fileId);
     if (!result) {
       return new Response("Not Found", { status: 404 });
     }

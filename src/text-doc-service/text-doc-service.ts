@@ -1,10 +1,13 @@
 /**
  * Text document replication service: Yjs/Hocuspocus integration
  * for text-only document sync, keyed by file identity.
+ *
+ * Uses Hocuspocus (not Server) directly — no listen(), connections
+ * are routed via handleConnection() from the Bun HTTP server.
  */
 
 import type { Database } from "bun:sqlite";
-import { Server as HocuspocusServer } from "@hocuspocus/server";
+import { Hocuspocus } from "@hocuspocus/server";
 import * as Y from "yjs";
 import { log } from "../shared/log";
 import { verifyToken } from "../transport/auth";
@@ -18,10 +21,8 @@ export interface TextDocServiceConfig {
  * Create the text document Hocuspocus service.
  * Each text file gets its own document name = fileId.
  */
-export function createTextDocService(
-  config: TextDocServiceConfig,
-): HocuspocusServer {
-  const hocuspocus = new HocuspocusServer({
+export function createTextDocService(config: TextDocServiceConfig): Hocuspocus {
+  const hocuspocus = new Hocuspocus({
     async onAuthenticate(data: { token: string }) {
       const token = data.token;
       if (!token || !verifyToken(token, config.authToken)) {

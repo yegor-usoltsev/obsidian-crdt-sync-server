@@ -3,12 +3,21 @@
  */
 
 import { join } from "node:path";
-import { createGitBackupJob, readGitBackupConfig } from "./backup/git-backup";
+import {
+  createGitBackupJob,
+  readGitBackupConfig,
+  validateWorktreeOverlap,
+} from "./backup/git-backup";
+import { createBlobStore } from "./blob-store/blob-store";
 import { createHistoryStore } from "./history/history-store";
 import { createMetadataRegistry } from "./metadata-registry/registry";
+import { createSettingsStore } from "./settings-store/settings-store";
 import { openDatabase } from "./shared/database";
 import { log } from "./shared/log";
-import { ensureTextDocTable } from "./text-doc-service/text-doc-service";
+import {
+  createTextDocService,
+  ensureTextDocTable,
+} from "./text-doc-service/text-doc-service";
 import { validateTokenConfig } from "./transport/auth";
 import { createSyncServer } from "./transport/server";
 
@@ -30,35 +39,57 @@ const db = openDatabase(dbPath);
 // Ensure text document table exists
 ensureTextDocTable(db);
 
-// Initialize subsystems
+// Initialize subsystems in order: database → registry → historyStore → blobStore → settingsStore → textDocService
 const registry = createMetadataRegistry(db);
-const _historyStore = createHistoryStore(db);
+const historyStore = createHistoryStore(db);
+const blobStore = await createBlobStore(db, DATA_DIR);
+const settingsStore = createSettingsStore(db, DATA_DIR);
+const textDocService = createTextDocService({ db, authToken: AUTH_TOKEN });
 
-// Create and start server
+// Create and start server with all subsystems
 const server = createSyncServer({
   port: PORT,
   authToken: AUTH_TOKEN,
   dataDir: DATA_DIR,
   db,
+  registry,
+  historyStore,
+  blobStore,
+  settingsStore,
+  textDocService,
 });
 
-server.start().then(() => {
-  log("info", "Server ready", { port: PORT, dataDir: DATA_DIR });
-});
+await server.start();
+log("info", "Server ready", { port: PORT, dataDir: DATA_DIR });
 
 // Optional Git backup
 const backupConfig = readGitBackupConfig();
 let backupJob: ReturnType<typeof createGitBackupJob> | null = null;
 if (backupConfig) {
-  backupJob = createGitBackupJob(backupConfig, registry, db, DATA_DIR);
-  backupJob.start();
+  const overlapError = validateWorktreeOverlap(
+    backupConfig.worktreePath,
+    DATA_DIR,
+  );
+  if (overlapError) {
+    log("error", overlapError);
+  } else {
+    backupJob = createGitBackupJob(
+      backupConfig,
+      registry,
+      db,
+      DATA_DIR,
+      blobStore,
+      settingsStore,
+    );
+    backupJob.start();
+  }
 }
 
-// Graceful shutdown
-function shutdown() {
+// Graceful shutdown: tear down in reverse order
+async function shutdown() {
   log("info", "Shutting down...");
   backupJob?.stop();
-  server.stop();
+  await server.stop();
   db.close();
   process.exit(0);
 }

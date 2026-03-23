@@ -265,6 +265,56 @@ describe("metadata-registry", () => {
     });
   });
 
+  describe("replay fingerprinting", () => {
+    it("returns original result for identical replay", () => {
+      const first = registry.processIntent({
+        type: "create",
+        clientId: "c1",
+        operationId: "op-fp-replay",
+        path: "fp-replay.md",
+        kind: "text",
+      });
+      expect("fileId" in first).toBe(true);
+
+      const second = registry.processIntent({
+        type: "create",
+        clientId: "c1",
+        operationId: "op-fp-replay",
+        path: "fp-replay.md",
+        kind: "text",
+      });
+      expect("fileId" in second).toBe(true);
+      if ("fileId" in first && "fileId" in second) {
+        expect(second.fileId).toBe(first.fileId);
+        expect(second.revision).toBe(first.revision);
+      }
+    });
+
+    it("rejects mismatched replay (different payload)", () => {
+      registry.processIntent({
+        type: "create",
+        clientId: "c1",
+        operationId: "op-fp-mismatch",
+        path: "fp-mismatch.md",
+        kind: "text",
+      });
+
+      const result = registry.processIntent({
+        type: "create",
+        clientId: "c1",
+        operationId: "op-fp-mismatch",
+        path: "fp-different.md",
+        kind: "text",
+      });
+      expect("reason" in result).toBe(true);
+      if ("reason" in result) {
+        expect(result.reason).toBe(
+          "operation ID reused with different payload",
+        );
+      }
+    });
+  });
+
   describe("content metadata", () => {
     it("updates advisory content metadata", () => {
       const result = registry.processIntent({
@@ -329,6 +379,111 @@ describe("metadata-registry", () => {
         "c1",
       );
       expect(updated).toBeNull();
+    });
+  });
+
+  describe("content-anchor validation", () => {
+    it("rejects stale rename intent", () => {
+      const create = registry.processIntent({
+        type: "create",
+        clientId: "c1",
+        operationId: "op-anchor-rename-create",
+        path: "anchor-rename.md",
+        kind: "text",
+      });
+      if (!("fileId" in create)) return;
+
+      // Advance content anchor to 3
+      registry.updateContentMetadata(create.fileId, "d1", 100, "c1");
+      registry.updateContentMetadata(create.fileId, "d2", 200, "c1");
+      registry.updateContentMetadata(create.fileId, "d3", 300, "c1");
+
+      const result = registry.processIntent({
+        type: "rename",
+        clientId: "c1",
+        operationId: "op-stale-rename",
+        fileId: create.fileId,
+        newPath: "anchor-rename-new.md",
+        contentAnchor: 1,
+      });
+      expect("reason" in result).toBe(true);
+      if ("reason" in result) {
+        expect(result.reason).toBe("stale content anchor");
+      }
+    });
+
+    it("rejects stale delete intent", () => {
+      const create = registry.processIntent({
+        type: "create",
+        clientId: "c1",
+        operationId: "op-anchor-delete-create",
+        path: "anchor-delete.md",
+        kind: "text",
+      });
+      if (!("fileId" in create)) return;
+
+      // Advance content anchor to 5
+      for (let i = 1; i <= 5; i++) {
+        registry.updateContentMetadata(create.fileId, `d${i}`, i * 100, "c1");
+      }
+
+      const result = registry.processIntent({
+        type: "delete",
+        clientId: "c1",
+        operationId: "op-stale-delete",
+        fileId: create.fileId,
+        contentAnchor: 2,
+      });
+      expect("reason" in result).toBe(true);
+      if ("reason" in result) {
+        expect(result.reason).toBe("stale content anchor");
+      }
+    });
+
+    it("accepts rename with current anchor", () => {
+      const create = registry.processIntent({
+        type: "create",
+        clientId: "c1",
+        operationId: "op-anchor-current-create",
+        path: "anchor-current.md",
+        kind: "text",
+      });
+      if (!("fileId" in create)) return;
+
+      registry.updateContentMetadata(create.fileId, "d1", 100, "c1");
+
+      const result = registry.processIntent({
+        type: "rename",
+        clientId: "c1",
+        operationId: "op-current-rename",
+        fileId: create.fileId,
+        newPath: "anchor-current-new.md",
+        contentAnchor: 1,
+      });
+      expect("fileId" in result).toBe(true);
+    });
+
+    it("skips validation when contentAnchor is absent", () => {
+      const create = registry.processIntent({
+        type: "create",
+        clientId: "c1",
+        operationId: "op-anchor-skip-create",
+        path: "anchor-skip.md",
+        kind: "text",
+      });
+      if (!("fileId" in create)) return;
+
+      registry.updateContentMetadata(create.fileId, "d1", 100, "c1");
+
+      const result = registry.processIntent({
+        type: "rename",
+        clientId: "c1",
+        operationId: "op-skip-rename",
+        fileId: create.fileId,
+        newPath: "anchor-skip-new.md",
+        // No contentAnchor field
+      });
+      expect("fileId" in result).toBe(true);
     });
   });
 
