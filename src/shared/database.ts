@@ -83,15 +83,36 @@ export function openDatabase(dbPath: string): Database {
 		ON blobs (digest)
 	`);
 
-  // Settings snapshots (legacy table kept for migration safety)
+  // Text documents (Y.Doc state)
   db.run(`
-		CREATE TABLE IF NOT EXISTS settings_snapshots (
-			config_path TEXT NOT NULL,
+		CREATE TABLE IF NOT EXISTS text_documents (
+			file_id TEXT PRIMARY KEY,
+			data BLOB NOT NULL,
+			updated_at INTEGER NOT NULL
+		)
+	`);
+
+  // Text snapshots for restore capability
+  db.run(`
+		CREATE TABLE IF NOT EXISTS text_snapshots (
+			file_id TEXT NOT NULL,
+			content_anchor INTEGER NOT NULL,
+			content TEXT NOT NULL,
+			stored_at INTEGER NOT NULL,
+			PRIMARY KEY (file_id, content_anchor)
+		)
+	`);
+
+  // Settings snapshots
+  db.run(`
+		CREATE TABLE IF NOT EXISTS settings_blobs (
+			file_id TEXT NOT NULL,
+			content_anchor INTEGER NOT NULL,
+			data BLOB NOT NULL,
 			digest TEXT NOT NULL,
 			size INTEGER NOT NULL,
-			content_anchor INTEGER NOT NULL,
 			stored_at INTEGER NOT NULL,
-			PRIMARY KEY (config_path, content_anchor)
+			PRIMARY KEY (file_id, content_anchor)
 		)
 	`);
 

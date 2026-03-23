@@ -22,10 +22,7 @@ import {
 } from "../../src/metadata-registry/registry";
 import { createSettingsStore } from "../../src/settings-store/settings-store";
 import { openDatabase } from "../../src/shared/database";
-import {
-  createTextDocService,
-  ensureTextDocTable,
-} from "../../src/text-doc-service/text-doc-service";
+import { createTextDocService } from "../../src/text-doc-service/text-doc-service";
 import { createSyncServer, type SyncServer } from "../../src/transport/server";
 
 describe("composed server integration", () => {
@@ -39,12 +36,20 @@ describe("composed server integration", () => {
 
   beforeAll(async () => {
     db = openDatabase(":memory:");
-    ensureTextDocTable(db);
     registry = createMetadataRegistry(db);
     const historyStore = createHistoryStore(db);
     blobStore = await createBlobStore(db, dataDir);
-    const settingsStore = createSettingsStore(db, dataDir);
-    const textDocService = createTextDocService({ db, authToken: AUTH_TOKEN });
+    const settingsStore = createSettingsStore(db);
+    // Deferred broadcast — wired after server creation
+    let broadcastFn: (
+      msg: import("../../src/transport/messages").ControlResponse,
+    ) => void = () => {};
+    const textDocService = createTextDocService({
+      db,
+      authToken: AUTH_TOKEN,
+      registry,
+      broadcast: (msg) => broadcastFn(msg),
+    });
 
     server = createSyncServer({
       port: 0,
@@ -58,6 +63,7 @@ describe("composed server integration", () => {
       textDocService,
     });
     await server.start();
+    broadcastFn = (msg) => server.broadcast(msg);
     baseUrl = `http://localhost:${server.port}`;
   });
 
@@ -316,18 +322,12 @@ describe("composed server integration", () => {
         };
         ws.onerror = () => {
           clearTimeout(timeout);
-          // Bun's ServerWebSocket is not fully compatible with the ws
-          // event-emitter API that Hocuspocus expects. The WebSocket
-          // upgrade succeeds (auth passes), but handleConnection() may
-          // fail because Bun's ws lacks .on()/.removeListener(). This
-          // is a known limitation tracked for a compatibility shim.
           resolve("error");
         };
       });
       ws.close();
-      // The connection was not rejected with 401 (auth passed).
-      // Full Hocuspocus CRDT sync requires a Bun↔ws compatibility shim.
-      expect(["opened", "error"]).toContain(result);
+      // BunWsAdapter shim must make this work — "opened" required, not "error"
+      expect(result).toBe("opened");
     });
   });
 

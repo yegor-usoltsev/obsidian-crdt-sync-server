@@ -12,7 +12,7 @@ describe("settings-store", () => {
 
   beforeEach(() => {
     db = openDatabase(":memory:");
-    store = createSettingsStore(db, "/tmp/test-settings");
+    store = createSettingsStore(db);
   });
 
   it("stores and retrieves a settings snapshot by fileId", () => {

@@ -14,10 +14,7 @@ import { createMetadataRegistry } from "./metadata-registry/registry";
 import { createSettingsStore } from "./settings-store/settings-store";
 import { openDatabase } from "./shared/database";
 import { log } from "./shared/log";
-import {
-  createTextDocService,
-  ensureTextDocTable,
-} from "./text-doc-service/text-doc-service";
+import { createTextDocService } from "./text-doc-service/text-doc-service";
 import { validateTokenConfig } from "./transport/auth";
 import { createSyncServer } from "./transport/server";
 
@@ -36,15 +33,20 @@ if (tokenError) {
 const dbPath = join(DATA_DIR, "sync.db");
 const db = openDatabase(dbPath);
 
-// Ensure text document table exists
-ensureTextDocTable(db);
-
-// Initialize subsystems in order: database → registry → historyStore → blobStore → settingsStore → textDocService
+// Initialize subsystems in order: database → registry → blobStore → settingsStore → historyStore → textDocService
 const registry = createMetadataRegistry(db);
-const historyStore = createHistoryStore(db);
 const blobStore = await createBlobStore(db, DATA_DIR);
-const settingsStore = createSettingsStore(db, DATA_DIR);
-const textDocService = createTextDocService({ db, authToken: AUTH_TOKEN });
+const settingsStore = createSettingsStore(db);
+const historyStore = createHistoryStore(db, blobStore, settingsStore);
+// Deferred broadcast - wired after server creation
+let broadcastFn: (msg: import("./transport/messages").ControlResponse) => void =
+  () => {};
+const textDocService = createTextDocService({
+  db,
+  authToken: AUTH_TOKEN,
+  registry,
+  broadcast: (msg) => broadcastFn(msg),
+});
 
 // Create and start server with all subsystems
 const server = createSyncServer({
@@ -58,6 +60,9 @@ const server = createSyncServer({
   settingsStore,
   textDocService,
 });
+
+// Wire deferred broadcast
+broadcastFn = (msg) => server.broadcast(msg);
 
 await server.start();
 log("info", "Server ready", { port: PORT, dataDir: DATA_DIR });

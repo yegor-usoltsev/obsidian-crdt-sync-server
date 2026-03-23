@@ -5,10 +5,7 @@ import { createHistoryStore } from "../../src/history/history-store";
 import { createMetadataRegistry } from "../../src/metadata-registry/registry";
 import { createSettingsStore } from "../../src/settings-store/settings-store";
 import { openDatabase } from "../../src/shared/database";
-import {
-  createTextDocService,
-  ensureTextDocTable,
-} from "../../src/text-doc-service/text-doc-service";
+import { createTextDocService } from "../../src/text-doc-service/text-doc-service";
 import { createSyncServer, type SyncServer } from "../../src/transport/server";
 
 describe("sync server", () => {
@@ -20,12 +17,16 @@ describe("sync server", () => {
 
   beforeAll(async () => {
     db = openDatabase(":memory:");
-    ensureTextDocTable(db);
     const registry = createMetadataRegistry(db);
     const historyStore = createHistoryStore(db);
     const blobStore = await createBlobStore(db, dataDir);
-    const settingsStore = createSettingsStore(db, dataDir);
-    const textDocService = createTextDocService({ db, authToken: AUTH_TOKEN });
+    const settingsStore = createSettingsStore(db);
+    const textDocService = createTextDocService({
+      db,
+      authToken: AUTH_TOKEN,
+      registry,
+      broadcast: () => {},
+    });
 
     server = createSyncServer({
       port: 0, // random port

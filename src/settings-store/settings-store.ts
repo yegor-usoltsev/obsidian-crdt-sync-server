@@ -20,12 +20,14 @@ export interface SettingsStore {
   ): { content: Uint8Array; metadata: SettingsSnapshot } | null;
   /** List all tracked fileIds. */
   listFileIds(): FileId[];
+  /** Retrieve a settings snapshot at a specific content anchor. */
+  getByAnchor(
+    fileId: FileId,
+    contentAnchor: number,
+  ): { content: Uint8Array; metadata: SettingsSnapshot } | null;
 }
 
-export function createSettingsStore(
-  db: Database,
-  _dataDir: string,
-): SettingsStore {
+export function createSettingsStore(db: Database): SettingsStore {
   // Settings blobs stored inline in SQLite since they're small
   db.run(`
 		CREATE TABLE IF NOT EXISTS settings_blobs (
@@ -48,7 +50,6 @@ export function createSettingsStore(
     ): SettingsSnapshot {
       const snapshot: SettingsSnapshot = {
         fileId,
-        configPath: "", // kept for backwards compatibility in type
         digest,
         size: content.byteLength,
         contentAnchor,
@@ -87,7 +88,6 @@ export function createSettingsStore(
         content: new Uint8Array(row.data),
         metadata: {
           fileId: row.file_id,
-          configPath: "",
           digest: row.digest,
           size: row.size,
           contentAnchor: row.content_anchor,
@@ -101,6 +101,30 @@ export function createSettingsStore(
         .query("SELECT DISTINCT file_id FROM settings_blobs")
         .all() as { file_id: string }[];
       return rows.map((r) => r.file_id);
+    },
+
+    getByAnchor(
+      fileId: FileId,
+      contentAnchor: number,
+    ): { content: Uint8Array; metadata: SettingsSnapshot } | null {
+      const row = db
+        .query(
+          "SELECT * FROM settings_blobs WHERE file_id = ? AND content_anchor = ?",
+        )
+        .get(fileId, contentAnchor) as RawSettingsBlobRow | null;
+
+      if (!row) return null;
+
+      return {
+        content: new Uint8Array(row.data),
+        metadata: {
+          fileId: row.file_id,
+          digest: row.digest,
+          size: row.size,
+          contentAnchor: row.content_anchor,
+          storedAt: row.stored_at,
+        },
+      };
     },
   };
 }

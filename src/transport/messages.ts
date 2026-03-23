@@ -28,25 +28,31 @@ export const ControlMessageSchema = v.variant("action", [
   v.object({
     action: v.literal("metadata.intent"),
     payload: MetadataIntentSchema,
+    requestId: v.optional(v.string()),
   }),
   v.object({
     action: v.literal("metadata.subscribe"),
     sinceRevision: v.optional(v.number()),
+    requestId: v.optional(v.string()),
   }),
   v.object({
     action: v.literal("history.list"),
     fileId: v.string(),
+    requestId: v.optional(v.string()),
   }),
   v.object({
     action: v.literal("history.restore"),
     fileId: v.string(),
     historyEntryId: v.number(),
+    requestId: v.optional(v.string()),
   }),
   v.object({
     action: v.literal("diagnostics.request"),
+    requestId: v.optional(v.string()),
   }),
   v.object({
     action: v.literal("ping"),
+    requestId: v.optional(v.string()),
   }),
 ]);
 
@@ -65,6 +71,9 @@ export interface MetadataCommitResponse {
     contentAnchor: number;
     revision: number;
     epoch: string;
+    operationType: string;
+    contentDigest?: string;
+    contentSize?: number;
   };
 }
 
@@ -77,7 +86,7 @@ export interface MetadataRejectResponse {
 }
 
 export interface EpochChangeResponse {
-  action: "epoch.change";
+  action: "metadata.epochChange";
   payload: {
     epoch: string;
     revision: number;

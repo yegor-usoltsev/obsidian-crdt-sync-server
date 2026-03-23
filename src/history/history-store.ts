@@ -3,6 +3,9 @@
  */
 
 import type { Database } from "bun:sqlite";
+import * as Y from "yjs";
+import type { BlobStore } from "../blob-store/blob-store";
+import type { SettingsStore } from "../settings-store/settings-store";
 import { getEpoch, nextRevision } from "../shared/database";
 import { log } from "../shared/log";
 import type { FileId, FileKind, HistoryEntry } from "../shared/types";
@@ -24,7 +27,11 @@ export interface HistoryStore {
   getEntryCount(): number;
 }
 
-export function createHistoryStore(db: Database): HistoryStore {
+export function createHistoryStore(
+  db: Database,
+  blobStore?: BlobStore,
+  settingsStore?: SettingsStore,
+): HistoryStore {
   return {
     getFileHistory(fileId: FileId): HistoryEntry[] {
       const rows = db
@@ -66,6 +73,73 @@ export function createHistoryStore(db: Database): HistoryStore {
         [row.path, row.kind, now, row.content_digest, row.content_size, fileId],
       );
 
+      // Get the new content_anchor after increment
+      const updatedFile = db
+        .query("SELECT content_anchor FROM files WHERE file_id = ?")
+        .get(fileId) as { content_anchor: number };
+      const newAnchor = updatedFile.content_anchor;
+
+      // Restore content based on file kind
+      const kind = row.kind as FileKind;
+      if (kind === "binary" && blobStore && row.content_anchor > 0) {
+        // Copy historical blob to new anchor
+        const historical = db
+          .query(
+            "SELECT digest FROM blobs WHERE file_id = ? AND content_anchor = ?",
+          )
+          .get(fileId, row.content_anchor) as { digest: string } | null;
+        if (historical) {
+          const blobDir = db
+            .query("SELECT value FROM server_state WHERE key = 'data_dir'")
+            .get() as { value: string } | null;
+          // Re-use the same digest at the new anchor
+          db.run(
+            `INSERT OR REPLACE INTO blobs (file_id, content_anchor, digest, size, stored_at)
+             VALUES (?, ?, ?, ?, ?)`,
+            [fileId, newAnchor, historical.digest, row.content_size, now],
+          );
+        }
+      } else if (kind === "text" && row.content_anchor > 0) {
+        // Restore text from text_snapshots
+        const snapshot = db
+          .query(
+            "SELECT content FROM text_snapshots WHERE file_id = ? AND content_anchor = ?",
+          )
+          .get(fileId, row.content_anchor) as { content: string } | null;
+        if (snapshot) {
+          // Create a fresh Y.Doc with the historical text
+          const doc = new Y.Doc();
+          doc.getText("content").insert(0, snapshot.content);
+          const update = Y.encodeStateAsUpdate(doc);
+          doc.destroy();
+          // Overwrite the text_documents row
+          db.run(
+            "INSERT OR REPLACE INTO text_documents (file_id, data, updated_at) VALUES (?, ?, ?)",
+            [fileId, Buffer.from(update), now],
+          );
+          // Also store a text snapshot at the new anchor
+          db.run(
+            "INSERT OR REPLACE INTO text_snapshots (file_id, content_anchor, content, stored_at) VALUES (?, ?, ?, ?)",
+            [fileId, newAnchor, snapshot.content, now],
+          );
+        }
+      }
+      // Settings restore: settingsStore handles its own per-anchor storage
+      if (settingsStore && row.content_anchor > 0) {
+        const historical = settingsStore.getByAnchor(
+          fileId,
+          row.content_anchor,
+        );
+        if (historical) {
+          settingsStore.store(
+            fileId,
+            historical.content,
+            historical.metadata.digest,
+            newAnchor,
+          );
+        }
+      }
+
       // Record the restore in history (append, never mutate)
       db.run(
         `INSERT INTO history (file_id, operation_type, path, kind, content_digest, content_size,
@@ -77,7 +151,7 @@ export function createHistoryStore(db: Database): HistoryStore {
           row.kind,
           row.content_digest,
           row.content_size,
-          row.content_anchor,
+          newAnchor,
           clientId,
           operationId,
           now,
@@ -86,15 +160,19 @@ export function createHistoryStore(db: Database): HistoryStore {
         ],
       );
 
+      const insertedId = (
+        db.query("SELECT last_insert_rowid() as id").get() as { id: number }
+      ).id;
+
       return {
-        id: 0,
+        id: insertedId,
         fileId,
         operationType: "restore",
         path: row.path,
-        kind: row.kind as FileKind,
+        kind,
         contentDigest: row.content_digest,
         contentSize: row.content_size,
-        contentAnchor: row.content_anchor,
+        contentAnchor: newAnchor,
         clientId,
         operationId,
         timestamp: now,

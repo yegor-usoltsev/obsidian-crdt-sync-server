@@ -9,12 +9,16 @@
 import type { Database } from "bun:sqlite";
 import { Hocuspocus } from "@hocuspocus/server";
 import * as Y from "yjs";
+import type { MetadataRegistry } from "../metadata-registry/registry";
 import { log } from "../shared/log";
 import { verifyToken } from "../transport/auth";
+import type { ControlResponse } from "../transport/messages";
 
 export interface TextDocServiceConfig {
   db: Database;
   authToken: string;
+  registry: MetadataRegistry;
+  broadcast: (msg: ControlResponse) => void;
 }
 
 /**
@@ -53,21 +57,50 @@ export function createTextDocService(config: TextDocServiceConfig): Hocuspocus {
 				 VALUES (?, ?, ?)`,
         [fileId, Buffer.from(state), Date.now()],
       );
+
+      // Extract text and compute digest for content metadata
+      const textContent = data.document.getText("content").toString();
+      const textBytes = new TextEncoder().encode(textContent);
+      const hasher = new Bun.CryptoHasher("sha256");
+      hasher.update(textBytes);
+      const digest = hasher.digest("hex");
+
+      const updated = config.registry.updateContentMetadata(
+        fileId,
+        digest,
+        textBytes.byteLength,
+        "text-doc-store",
+      );
+
+      if (updated) {
+        // Save text snapshot for restore capability
+        config.db.run(
+          `INSERT OR REPLACE INTO text_snapshots (file_id, content_anchor, content, stored_at)
+           VALUES (?, ?, ?, ?)`,
+          [fileId, updated.contentAnchor, textContent, Date.now()],
+        );
+
+        // Broadcast content-update to all subscribed clients
+        const registryState = config.registry.getState();
+        config.broadcast({
+          action: "metadata.commit",
+          payload: {
+            operationId: crypto.randomUUID(),
+            fileId: updated.fileId,
+            path: updated.path,
+            kind: updated.kind,
+            deleted: updated.deleted,
+            contentAnchor: updated.contentAnchor,
+            revision: registryState.revision,
+            epoch: registryState.epoch,
+            operationType: "content-update",
+            contentDigest: updated.contentDigest ?? undefined,
+            contentSize: updated.contentSize ?? undefined,
+          },
+        });
+      }
     },
   });
 
   return hocuspocus;
-}
-
-/**
- * Ensure text_documents table exists in the database.
- */
-export function ensureTextDocTable(db: Database): void {
-  db.run(`
-		CREATE TABLE IF NOT EXISTS text_documents (
-			file_id TEXT PRIMARY KEY,
-			data BLOB NOT NULL,
-			updated_at INTEGER NOT NULL
-		)
-	`);
 }

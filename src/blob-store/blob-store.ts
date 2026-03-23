@@ -25,6 +25,11 @@ export interface BlobStore {
   existsByDigest(digest: string): boolean;
   /** Get blob metadata for a file. */
   getMetadata(fileId: FileId): BlobRecord | null;
+  /** Retrieve a blob at a specific content anchor. */
+  retrieveByAnchor(
+    fileId: FileId,
+    contentAnchor: number,
+  ): Promise<{ content: Uint8Array; metadata: BlobRecord } | null>;
 }
 
 export async function createBlobStore(
@@ -115,6 +120,33 @@ export async function createBlobStore(
         )
         .get(fileId) as RawBlobRow | null;
       return row ? rowToBlobRecord(row) : null;
+    },
+
+    async retrieveByAnchor(
+      fileId: FileId,
+      contentAnchor: number,
+    ): Promise<{ content: Uint8Array; metadata: BlobRecord } | null> {
+      const row = db
+        .query("SELECT * FROM blobs WHERE file_id = ? AND content_anchor = ?")
+        .get(fileId, contentAnchor) as RawBlobRow | null;
+
+      if (!row) return null;
+
+      const blobPath = join(blobDir, row.digest);
+      const file = Bun.file(blobPath);
+      if (!(await file.exists())) {
+        log("warn", "Blob file missing on disk", {
+          fileId,
+          digest: row.digest,
+        });
+        return null;
+      }
+
+      const content = new Uint8Array(await file.arrayBuffer());
+      return {
+        content,
+        metadata: rowToBlobRecord(row),
+      };
     },
   };
 }

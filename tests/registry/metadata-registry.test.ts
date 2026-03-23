@@ -103,6 +103,7 @@ describe("metadata-registry", () => {
         operationId: "op-rename",
         fileId: createResult.fileId,
         newPath: "new-name.md",
+        contentAnchor: 0,
       });
 
       expect("fileId" in renameResult).toBe(true);
@@ -139,6 +140,7 @@ describe("metadata-registry", () => {
         operationId: "op-dir-rename",
         fileId: dirFile?.fileId,
         newPath: "renamed-folder",
+        contentAnchor: 0,
       });
 
       expect("fileId" in renameResult).toBe(true);
@@ -171,6 +173,7 @@ describe("metadata-registry", () => {
         operationId: "op-bad-move",
         fileId: dir?.fileId,
         newPath: "parent/child/parent",
+        contentAnchor: 0,
       });
       expect("reason" in result).toBe(true);
     });
@@ -193,6 +196,7 @@ describe("metadata-registry", () => {
         clientId: "c1",
         operationId: "op-del",
         fileId: createResult.fileId,
+        contentAnchor: 0,
       });
 
       expect("fileId" in deleteResult).toBe(true);
@@ -229,6 +233,7 @@ describe("metadata-registry", () => {
         clientId: "c1",
         operationId: "op-cascade-del",
         fileId: dir?.fileId,
+        contentAnchor: 0,
       });
 
       const activeFiles = registry.listActiveFiles();
@@ -370,6 +375,7 @@ describe("metadata-registry", () => {
         clientId: "c1",
         operationId: "op-del-content-del",
         fileId: result.fileId,
+        contentAnchor: 0,
       });
 
       const updated = registry.updateContentMetadata(
@@ -463,7 +469,7 @@ describe("metadata-registry", () => {
       expect("fileId" in result).toBe(true);
     });
 
-    it("skips validation when contentAnchor is absent", () => {
+    it("rejects rename when contentAnchor is absent", () => {
       const create = registry.processIntent({
         type: "create",
         clientId: "c1",
@@ -481,9 +487,12 @@ describe("metadata-registry", () => {
         operationId: "op-skip-rename",
         fileId: create.fileId,
         newPath: "anchor-skip-new.md",
-        // No contentAnchor field
+        // No contentAnchor field — now required
       });
-      expect("fileId" in result).toBe(true);
+      expect("reason" in result).toBe(true);
+      if ("reason" in result) {
+        expect(result.reason).toBe("contentAnchor is required");
+      }
     });
   });
 

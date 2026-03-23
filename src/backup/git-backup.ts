@@ -70,8 +70,8 @@ export function readGitBackupConfig(): GitBackupConfig | null {
   if (remote) {
     try {
       const url = new URL(remote);
-      if (!["https:", "http:"].includes(url.protocol)) {
-        log("warn", "Git backup remote must use https:// or http://", {
+      if (url.protocol !== "https:") {
+        log("warn", "Git backup remote must use https://", {
           remote,
         });
         return null;
@@ -98,12 +98,28 @@ export function readGitBackupConfig(): GitBackupConfig | null {
   };
 }
 
-export interface GitBackupDeps {
-  registry: MetadataRegistry;
-  db: Database;
-  dataDir: string;
-  blobStore: BlobStore;
-  settingsStore: SettingsStore;
+/**
+ * Check if a file path should be excluded from git backup.
+ * Filters out OS junk files, node_modules, and dot-prefixed directories.
+ */
+export function isBackupExcluded(path: string): boolean {
+  const basename = path.split("/").pop() ?? "";
+  if (
+    basename === ".DS_Store" ||
+    basename === "Thumbs.db" ||
+    basename === "desktop.ini"
+  ) {
+    return true;
+  }
+  if (path.startsWith("node_modules/") || path.includes("/node_modules/")) {
+    return true;
+  }
+  // Exclude paths with dot-prefixed directory segments
+  const segments = path.split("/");
+  for (let i = 0; i < segments.length - 1; i++) {
+    if (segments[i]!.startsWith(".")) return true;
+  }
+  return false;
 }
 
 export function createGitBackupJob(
@@ -111,8 +127,8 @@ export function createGitBackupJob(
   registry: MetadataRegistry,
   db: Database,
   dataDir: string,
-  blobStore?: BlobStore,
-  settingsStore?: SettingsStore,
+  blobStore: BlobStore,
+  settingsStore: SettingsStore,
 ): GitBackupJob {
   let timer: ReturnType<typeof setInterval> | null = null;
   let lastTreeHash: string | null = null;
@@ -142,7 +158,9 @@ export function createGitBackupJob(
       }
 
       // Export canonical vault tree
-      const activeFiles = registry.listActiveFiles();
+      const activeFiles = registry
+        .listActiveFiles()
+        .filter((f) => !isBackupExcluded(f.path));
       const activePaths = new Set(activeFiles.map((f) => f.path));
 
       // Write managed .gitignore
@@ -183,10 +201,10 @@ export function createGitBackupJob(
           if (row?.data) {
             const doc = new Y.Doc();
             Y.applyUpdate(doc, new Uint8Array(row.data));
-            const text = doc.getText("default").toString();
+            const text = doc.getText("content").toString();
             await writeFile(filePath, text);
           }
-        } else if (file.kind === "binary" && blobStore) {
+        } else if (file.kind === "binary") {
           const result = await blobStore.retrieve(file.fileId);
           if (result) {
             await writeFile(filePath, result.content);
@@ -197,7 +215,7 @@ export function createGitBackupJob(
       }
 
       // Materialize settings files
-      if (settingsStore) {
+      {
         const settingsFileIds = settingsStore.listFileIds();
         for (const fileId of settingsFileIds) {
           const fileMeta = registry.getFile(fileId);

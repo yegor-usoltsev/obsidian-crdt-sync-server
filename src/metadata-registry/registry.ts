@@ -66,6 +66,10 @@ export function createMetadataRegistry(db: Database): MetadataRegistry {
           contentAnchor: existingRow.content_anchor,
           revision: existingRow.revision,
           epoch: existingRow.epoch,
+          operationType:
+            existingRow.operation_type as MetadataCommit["operationType"],
+          contentDigest: existingRow.content_digest ?? undefined,
+          contentSize: existingRow.content_size ?? undefined,
         };
       }
 
@@ -244,6 +248,7 @@ function processCreate(
     contentAnchor: 0,
     revision,
     epoch,
+    operationType: "create",
   };
 }
 
@@ -280,11 +285,15 @@ function processRename(
     };
   }
 
-  // Content-anchor validation: reject stale intents
-  if (
-    intent.contentAnchor !== undefined &&
-    intent.contentAnchor < file.content_anchor
-  ) {
+  // Content-anchor validation: required for rename
+  if (intent.contentAnchor === undefined) {
+    return {
+      operationId: intent.operationId,
+      reason: "contentAnchor is required",
+    };
+  }
+
+  if (intent.contentAnchor < file.content_anchor) {
     return {
       operationId: intent.operationId,
       reason: "stale content anchor",
@@ -372,6 +381,7 @@ function processRename(
     contentAnchor: file.content_anchor,
     revision,
     epoch,
+    operationType: intent.type,
   };
 }
 
@@ -397,11 +407,15 @@ function processDelete(
     };
   }
 
-  // Content-anchor validation: reject stale intents
-  if (
-    intent.contentAnchor !== undefined &&
-    intent.contentAnchor < file.content_anchor
-  ) {
+  // Content-anchor validation: required for delete
+  if (intent.contentAnchor === undefined) {
+    return {
+      operationId: intent.operationId,
+      reason: "contentAnchor is required",
+    };
+  }
+
+  if (intent.contentAnchor < file.content_anchor) {
     return {
       operationId: intent.operationId,
       reason: "stale content anchor",
@@ -467,6 +481,7 @@ function processDelete(
     contentAnchor: file.content_anchor,
     revision,
     epoch,
+    operationType: "delete",
   };
 }
 

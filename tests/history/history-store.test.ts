@@ -46,6 +46,7 @@ describe("history-store", () => {
       operationId: "op-rename",
       fileId: result.fileId,
       newPath: "new.md",
+      contentAnchor: 0,
     });
 
     const entries = history.getFileHistory(result.fileId);
@@ -72,6 +73,7 @@ describe("history-store", () => {
       operationId: "op-delete",
       fileId: result.fileId,
       contentDigest: "sha256-test",
+      contentAnchor: 1,
     });
 
     const entries = history.getFileHistory(result.fileId);
@@ -96,6 +98,7 @@ describe("history-store", () => {
       clientId: "c1",
       operationId: "op-restore-delete",
       fileId: result.fileId,
+      contentAnchor: 0,
     });
 
     // Get the create entry ID

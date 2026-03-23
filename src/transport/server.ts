@@ -12,7 +12,12 @@ import type { MetadataRegistry } from "../metadata-registry/registry";
 import type { SettingsStore } from "../settings-store/settings-store";
 import { log } from "../shared/log";
 import { isRateLimited, recordAuthFailure, verifyToken } from "./auth";
-import { type ControlResponse, parseControlMessage } from "./messages";
+import { BunWsAdapter } from "./bun-ws-shim";
+import {
+  type ControlResponse,
+  type MetadataCommitResponse,
+  parseControlMessage,
+} from "./messages";
 
 /** Payload size limits. */
 export const PAYLOAD_LIMITS = {
@@ -36,6 +41,8 @@ export interface SyncServer {
   start(): Promise<void>;
   stop(): Promise<void>;
   readonly port: number;
+  /** Broadcast a message to all authenticated WebSocket clients. */
+  broadcast(msg: ControlResponse): void;
 }
 
 interface WsData {
@@ -43,6 +50,7 @@ interface WsData {
   clientId?: string;
   subscribedRevision?: number;
   docFileId?: string;
+  docAdapter?: BunWsAdapter;
 }
 
 /**
@@ -68,6 +76,10 @@ export function createSyncServer(config: SyncServerConfig): SyncServer {
   return {
     get port() {
       return server?.port ?? config.port;
+    },
+
+    broadcast(msg: ControlResponse) {
+      broadcast(msg);
     },
 
     async start() {
@@ -107,8 +119,13 @@ export function createSyncServer(config: SyncServerConfig): SyncServer {
               return new Response("Unauthorized", { status: 401 });
             }
 
+            const clientId =
+              req.headers.get("x-client-id") ??
+              url.searchParams.get("clientId") ??
+              crypto.randomUUID();
+
             const upgraded = srv.upgrade(req, {
-              data: { authenticated: true },
+              data: { authenticated: true, clientId },
             });
             if (upgraded) return undefined as unknown as Response;
             return new Response("WebSocket upgrade failed", { status: 500 });
@@ -176,12 +193,12 @@ export function createSyncServer(config: SyncServerConfig): SyncServer {
 
           // Blob endpoints
           if (url.pathname.startsWith("/blobs/")) {
-            return handleBlobRequest(req, url, config);
+            return handleBlobRequest(req, url, config, broadcast);
           }
 
           // Settings endpoints
           if (url.pathname.startsWith("/settings/")) {
-            return handleSettingsRequest(req, url, config);
+            return handleSettingsRequest(req, url, config, broadcast);
           }
 
           return new Response("Not Found", { status: 404 });
@@ -190,13 +207,20 @@ export function createSyncServer(config: SyncServerConfig): SyncServer {
         websocket: {
           open(ws) {
             if (ws.data.docFileId) {
-              // Route to Hocuspocus for text-doc sync.
-              // Hocuspocus expects a Node.js ws WebSocket; Bun's ServerWebSocket
-              // needs a compatibility shim for the event-emitter API.
+              // Route to Hocuspocus for text-doc sync via BunWsAdapter shim.
               try {
+                const adapter = new BunWsAdapter(ws);
+                ws.data.docAdapter = adapter;
+                // Hocuspocus expects an IncomingMessage-like object with
+                // headers and url properties. Since Bun doesn't provide
+                // this via the WebSocket upgrade, we supply a minimal shim.
+                const mockRequest = {
+                  headers: {},
+                  url: `/docs/${ws.data.docFileId}`,
+                } as unknown as import("http").IncomingMessage;
                 config.textDocService.handleConnection(
-                  ws as unknown as import("ws").WebSocket,
-                  undefined as unknown as import("http").IncomingMessage,
+                  adapter as unknown as import("ws").WebSocket,
+                  mockRequest,
                   { documentName: ws.data.docFileId },
                 );
               } catch (err) {
@@ -213,6 +237,16 @@ export function createSyncServer(config: SyncServerConfig): SyncServer {
           },
 
           message(ws, message) {
+            // Forward doc messages to Hocuspocus via adapter
+            if (ws.data.docAdapter) {
+              ws.data.docAdapter._emitMessage(
+                typeof message === "string"
+                  ? message
+                  : (message as unknown as ArrayBuffer),
+              );
+              return;
+            }
+
             const parsed = parseControlMessage(String(message));
 
             if ("error" in parsed) {
@@ -238,10 +272,14 @@ export function createSyncServer(config: SyncServerConfig): SyncServer {
                   const state = config.registry.getState();
                   const isReplay = result.revision < state.revision;
 
+                  const commitPayload = {
+                    ...result,
+                  };
+
                   // Always send commit to the requesting client
                   send(ws, {
                     action: "metadata.commit",
-                    payload: result,
+                    payload: commitPayload,
                   });
 
                   // Broadcast new commits to other clients (not replays)
@@ -249,7 +287,7 @@ export function createSyncServer(config: SyncServerConfig): SyncServer {
                     broadcast(
                       {
                         action: "metadata.commit",
-                        payload: result,
+                        payload: commitPayload,
                       },
                       ws,
                     );
@@ -261,26 +299,39 @@ export function createSyncServer(config: SyncServerConfig): SyncServer {
               case "metadata.subscribe": {
                 ws.data.subscribedRevision = parsed.sinceRevision ?? 0;
                 // Send any commits since the requested revision
-                if (parsed.sinceRevision !== undefined) {
-                  const entries = config.historyStore.getHistorySince(
-                    parsed.sinceRevision,
-                  );
-                  for (const entry of entries) {
-                    send(ws, {
-                      action: "metadata.commit",
-                      payload: {
-                        operationId: entry.operationId,
-                        fileId: entry.fileId,
-                        path: entry.path,
-                        kind: entry.kind,
-                        deleted: entry.operationType === "delete",
-                        contentAnchor: entry.contentAnchor,
-                        revision: entry.revision,
-                        epoch: entry.epoch,
-                      },
-                    });
-                  }
+                const sinceRev = parsed.sinceRevision ?? 0;
+                const entries = config.historyStore.getHistorySince(sinceRev);
+                for (const entry of entries) {
+                  send(ws, {
+                    action: "metadata.commit",
+                    payload: {
+                      operationId: entry.operationId,
+                      fileId: entry.fileId,
+                      path: entry.path,
+                      kind: entry.kind,
+                      deleted: entry.operationType === "delete",
+                      contentAnchor: entry.contentAnchor,
+                      revision: entry.revision,
+                      epoch: entry.epoch,
+                      operationType: entry.operationType,
+                      contentDigest: entry.contentDigest ?? undefined,
+                      contentSize: entry.contentSize ?? undefined,
+                    },
+                  });
                 }
+
+                // Send replay-complete signal
+                const currentState = config.registry.getState();
+                ws.send(
+                  JSON.stringify({
+                    action: "metadata.replay-complete",
+                    sinceRevision: sinceRev,
+                    currentRevision: currentState.revision,
+                    ...(parsed.requestId !== undefined && {
+                      requestId: parsed.requestId,
+                    }),
+                  }),
+                );
                 break;
               }
 
@@ -292,6 +343,9 @@ export function createSyncServer(config: SyncServerConfig): SyncServer {
                   JSON.stringify({
                     action: "history.list",
                     payload: entries,
+                    ...(parsed.requestId !== undefined && {
+                      requestId: parsed.requestId,
+                    }),
                   }),
                 );
                 break;
@@ -308,8 +362,30 @@ export function createSyncServer(config: SyncServerConfig): SyncServer {
                     JSON.stringify({
                       action: "history.restored",
                       payload: restored,
+                      ...(parsed.requestId !== undefined && {
+                        requestId: parsed.requestId,
+                      }),
                     }),
                   );
+
+                  // Broadcast restore commit to ALL connected clients (including requester).
+                  // The requester also needs the commit to materialize non-text restores.
+                  broadcast({
+                    action: "metadata.commit",
+                    payload: {
+                      operationId: restored.operationId,
+                      fileId: restored.fileId,
+                      path: restored.path,
+                      kind: restored.kind,
+                      deleted: false,
+                      contentAnchor: restored.contentAnchor,
+                      revision: restored.revision,
+                      epoch: restored.epoch,
+                      operationType: "restore",
+                      contentDigest: restored.contentDigest ?? undefined,
+                      contentSize: restored.contentSize ?? undefined,
+                    },
+                  });
                 } else {
                   send(ws, {
                     action: "error",
@@ -330,6 +406,9 @@ export function createSyncServer(config: SyncServerConfig): SyncServer {
                       revision: state.revision,
                       activeFiles: files.length,
                     },
+                    ...(parsed.requestId !== undefined && {
+                      requestId: parsed.requestId,
+                    }),
                   }),
                 );
                 break;
@@ -338,6 +417,10 @@ export function createSyncServer(config: SyncServerConfig): SyncServer {
           },
 
           close(ws) {
+            if (ws.data.docAdapter) {
+              ws.data.docAdapter._emitClose();
+              return;
+            }
             wsClients.delete(ws);
             log("info", "WebSocket client disconnected");
           },
@@ -359,11 +442,44 @@ export function createSyncServer(config: SyncServerConfig): SyncServer {
   };
 }
 
+/** Construct a metadata.commit payload from FileMetadata for content-update broadcasts. */
+function buildContentUpdateCommit(
+  file: {
+    fileId: string;
+    path: string;
+    kind: string;
+    deleted: boolean;
+    contentAnchor: number;
+    contentDigest: string | null;
+    contentSize: number | null;
+  },
+  revision: number,
+  epoch: string,
+): MetadataCommitResponse {
+  return {
+    action: "metadata.commit",
+    payload: {
+      operationId: crypto.randomUUID(),
+      fileId: file.fileId,
+      path: file.path,
+      kind: file.kind,
+      deleted: file.deleted,
+      contentAnchor: file.contentAnchor,
+      revision,
+      epoch,
+      operationType: "content-update",
+      contentDigest: file.contentDigest ?? undefined,
+      contentSize: file.contentSize ?? undefined,
+    },
+  };
+}
+
 /** Handle blob upload/download requests. */
 async function handleBlobRequest(
   req: Request,
   url: URL,
   config: SyncServerConfig,
+  broadcast: (msg: ControlResponse) => void,
 ): Promise<Response> {
   // /blobs/check/:digest — content-addressed existence check
   if (url.pathname.startsWith("/blobs/check/")) {
@@ -420,12 +536,20 @@ async function handleBlobRequest(
     );
 
     // Update registry content metadata
-    config.registry.updateContentMetadata(
+    const updatedFile = config.registry.updateContentMetadata(
       fileId,
       digest,
       content.byteLength,
       "blob-upload",
     );
+
+    // Broadcast content-update to all subscribed clients
+    if (updatedFile) {
+      const state = config.registry.getState();
+      broadcast(
+        buildContentUpdateCommit(updatedFile, state.revision, state.epoch),
+      );
+    }
 
     return new Response(JSON.stringify(record), {
       headers: { "Content-Type": "application/json" },
@@ -466,12 +590,17 @@ async function handleSettingsRequest(
   req: Request,
   url: URL,
   config: SyncServerConfig,
+  broadcast: (msg: ControlResponse) => void,
 ): Promise<Response> {
-  // /settings/:configPath
-  const configPath = decodeURIComponent(
+  // /settings/:configPath — configPath is relative (e.g. "app.json")
+  const configRelativePath = decodeURIComponent(
     url.pathname.slice("/settings/".length),
   );
-  if (!configPath) {
+  // Registry uses canonical vault paths with the config directory prefix
+  const configPath = configRelativePath
+    ? `.obsidian/${configRelativePath}`
+    : "";
+  if (!configRelativePath) {
     if (req.method === "GET") {
       // List all tracked settings fileIds
       const fileIds = config.settingsStore.listFileIds();
@@ -536,7 +665,10 @@ async function handleSettingsRequest(
       content.byteLength,
       "settings-upload",
     );
-    const contentAnchor = updated?.contentAnchor ?? 1;
+    if (!updated) {
+      return new Response("Failed to update content metadata", { status: 500 });
+    }
+    const contentAnchor = updated.contentAnchor;
 
     const snapshot = config.settingsStore.store(
       fileId,
@@ -544,6 +676,12 @@ async function handleSettingsRequest(
       digest,
       contentAnchor,
     );
+
+    // Broadcast content-update to all subscribed clients
+    if (updated) {
+      const state = config.registry.getState();
+      broadcast(buildContentUpdateCommit(updated, state.revision, state.epoch));
+    }
 
     return new Response(JSON.stringify(snapshot), {
       headers: { "Content-Type": "application/json" },

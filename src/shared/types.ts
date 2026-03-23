@@ -44,6 +44,9 @@ export interface MetadataCommit {
   contentAnchor: number;
   revision: number;
   epoch: string;
+  operationType: MetadataIntentType | "content-update" | "restore";
+  contentDigest?: string;
+  contentSize?: number;
 }
 
 /** Rejection for an invalid intent. */
@@ -81,7 +84,6 @@ export interface BlobRecord {
 /** Settings snapshot record. */
 export interface SettingsSnapshot {
   fileId: FileId;
-  configPath: string;
   digest: string;
   size: number;
   contentAnchor: number;
