@@ -34,9 +34,8 @@ export interface BlobStore {
 
 export async function createBlobStore(
   db: Database,
-  dataDir: string,
+  blobDir: string,
 ): Promise<BlobStore> {
-  const blobDir = join(dataDir, "blobs");
   await mkdir(blobDir, { recursive: true });
 
   return {

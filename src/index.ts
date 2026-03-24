@@ -30,12 +30,12 @@ if (tokenError) {
 }
 
 // Initialize database
-const dbPath = join(DATA_DIR, "sync.db");
+const dbPath = join(DATA_DIR, "db", "sync.db");
 const db = openDatabase(dbPath);
 
 // Initialize subsystems in order: database → registry → blobStore → settingsStore → historyStore → textDocService
 const registry = createMetadataRegistry(db);
-const blobStore = await createBlobStore(db, DATA_DIR);
+const blobStore = await createBlobStore(db, join(DATA_DIR, "blobs"));
 const settingsStore = createSettingsStore(db);
 const historyStore = createHistoryStore(db, blobStore, settingsStore);
 // Deferred broadcast - wired after server creation
@@ -52,7 +52,6 @@ const textDocService = createTextDocService({
 const server = createSyncServer({
   port: PORT,
   authToken: AUTH_TOKEN,
-  dataDir: DATA_DIR,
   db,
   registry,
   historyStore,
@@ -67,13 +66,15 @@ broadcastFn = (msg) => server.broadcast(msg);
 await server.start();
 log("info", "Server ready", { port: PORT, dataDir: DATA_DIR });
 
+const dbDir = join(DATA_DIR, "db");
+
 // Optional Git backup
 const backupConfig = readGitBackupConfig();
 let backupJob: ReturnType<typeof createGitBackupJob> | null = null;
 if (backupConfig) {
   const overlapError = validateWorktreeOverlap(
     backupConfig.worktreePath,
-    DATA_DIR,
+    dbDir,
   );
   if (overlapError) {
     log("error", overlapError);
@@ -82,7 +83,7 @@ if (backupConfig) {
       backupConfig,
       registry,
       db,
-      DATA_DIR,
+      dbDir,
       blobStore,
       settingsStore,
     );

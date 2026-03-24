@@ -28,19 +28,6 @@ export interface SettingsStore {
 }
 
 export function createSettingsStore(db: Database): SettingsStore {
-  // Settings blobs stored inline in SQLite since they're small
-  db.run(`
-		CREATE TABLE IF NOT EXISTS settings_blobs (
-			file_id TEXT NOT NULL,
-			content_anchor INTEGER NOT NULL,
-			data BLOB NOT NULL,
-			digest TEXT NOT NULL,
-			size INTEGER NOT NULL,
-			stored_at INTEGER NOT NULL,
-			PRIMARY KEY (file_id, content_anchor)
-		)
-	`);
-
   return {
     store(
       fileId: FileId,

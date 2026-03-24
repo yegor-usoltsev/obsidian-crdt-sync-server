@@ -32,13 +32,13 @@ describe("composed server integration", () => {
   let blobStore: BlobStore;
   const AUTH_TOKEN = "a".repeat(32);
   let baseUrl: string;
-  const dataDir = "/tmp/crdt-sync-integration-test";
+  const blobDir = "/tmp/crdt-sync-integration-test/blobs";
 
   beforeAll(async () => {
     db = openDatabase(":memory:");
     registry = createMetadataRegistry(db);
     const historyStore = createHistoryStore(db);
-    blobStore = await createBlobStore(db, dataDir);
+    blobStore = await createBlobStore(db, blobDir);
     const settingsStore = createSettingsStore(db);
     // Deferred broadcast — wired after server creation
     let broadcastFn: (
@@ -54,7 +54,6 @@ describe("composed server integration", () => {
     server = createSyncServer({
       port: 0,
       authToken: AUTH_TOKEN,
-      dataDir,
       db,
       registry,
       historyStore,

@@ -13,13 +13,13 @@ describe("sync server", () => {
   let server: SyncServer;
   const AUTH_TOKEN = "a".repeat(32);
   let baseUrl: string;
-  const dataDir = "/tmp/crdt-sync-test-server";
+  const blobDir = "/tmp/crdt-sync-test-server/blobs";
 
   beforeAll(async () => {
     db = openDatabase(":memory:");
     const registry = createMetadataRegistry(db);
     const historyStore = createHistoryStore(db);
-    const blobStore = await createBlobStore(db, dataDir);
+    const blobStore = await createBlobStore(db, blobDir);
     const settingsStore = createSettingsStore(db);
     const textDocService = createTextDocService({
       db,
@@ -31,7 +31,6 @@ describe("sync server", () => {
     server = createSyncServer({
       port: 0, // random port
       authToken: AUTH_TOKEN,
-      dataDir,
       db,
       registry,
       historyStore,

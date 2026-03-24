@@ -28,7 +28,6 @@ export const PAYLOAD_LIMITS = {
 export interface SyncServerConfig {
   port: number;
   authToken: string;
-  dataDir: string;
   db: Database;
   registry: MetadataRegistry;
   historyStore: HistoryStore;

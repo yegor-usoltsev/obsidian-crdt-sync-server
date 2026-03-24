@@ -52,7 +52,7 @@ docker run -d \
   -p 3000:3000 \
   -v ./data:/data \
   -e AUTH_TOKEN="your-random-secret-at-least-32-chars" \
-  -e DATA_DIR=/data/db \
+  -e DATA_DIR=/data \
   -e BACKUP_GIT_WORKTREE_DIR=/data/git \
   yusoltsev/obsidian-crdt-sync-server:latest
 ```
@@ -72,7 +72,7 @@ Set environment variables via a `.env` file or export them before running. See `
 | ----------------------------- | ------------------- | ------------------------- | ----------------------------------------------- |
 | `AUTH_TOKEN`                  | ✅                  | —                         | Shared secret for WebSocket auth (min 32 chars) |
 | `PORT`                        |                     | `3000`                    | Port to listen on                               |
-| `DATA_DIR`                    |                     | `./data/db`               | Directory for the SQLite database               |
+| `DATA_DIR`                    |                     | `./data`                  | Root directory for all server data (db, blobs)  |
 | `BACKUP_GIT_INTERVAL_MINUTES` |                     | —                         | Enable periodic Git backup (positive integer)   |
 | `BACKUP_GIT_URL`              | when backup enabled | —                         | HTTPS remote URL                                |
 | `BACKUP_GIT_USERNAME`         | when backup enabled | —                         | Git HTTPS username                              |

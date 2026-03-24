@@ -9,7 +9,7 @@ services:
       - ./data:/data
     environment:
       AUTH_TOKEN: ${AUTH_TOKEN}
-      DATA_DIR: /data/db
+      DATA_DIR: /data
       BACKUP_GIT_WORKTREE_DIR: /data/git
       # Optional: git backup
       # BACKUP_GIT_INTERVAL_MINUTES: 60

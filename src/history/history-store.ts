@@ -89,9 +89,6 @@ export function createHistoryStore(
           )
           .get(fileId, row.content_anchor) as { digest: string } | null;
         if (historical) {
-          const blobDir = db
-            .query("SELECT value FROM server_state WHERE key = 'data_dir'")
-            .get() as { value: string } | null;
           // Re-use the same digest at the new anchor
           db.run(
             `INSERT OR REPLACE INTO blobs (file_id, content_anchor, digest, size, stored_at)

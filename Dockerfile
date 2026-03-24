@@ -8,7 +8,7 @@ COPY main.js .
 
 EXPOSE 3000
 
-ENV DATA_DIR=/data/db
+ENV DATA_DIR=/data
 ENV BACKUP_GIT_WORKTREE_DIR=/data/git
 VOLUME ["/data"]
 

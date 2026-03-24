@@ -40,7 +40,7 @@ describe("verification tests", () => {
   let settingsStore: SettingsStore;
   const AUTH_TOKEN = "a".repeat(32);
   let baseUrl: string;
-  const dataDir = "/tmp/crdt-sync-verification-test";
+  const blobDir = "/tmp/crdt-sync-verification-test/blobs";
   const broadcasts: ControlResponse[] = [];
 
   function createFile(
@@ -72,7 +72,7 @@ describe("verification tests", () => {
   beforeAll(async () => {
     db = openDatabase(":memory:");
     registry = createMetadataRegistry(db);
-    blobStore = await createBlobStore(db, dataDir);
+    blobStore = await createBlobStore(db, blobDir);
     settingsStore = createSettingsStore(db);
     historyStore = createHistoryStore(db, blobStore, settingsStore);
 
@@ -87,7 +87,6 @@ describe("verification tests", () => {
     server = createSyncServer({
       port: 0,
       authToken: AUTH_TOKEN,
-      dataDir,
       db,
       registry,
       historyStore,

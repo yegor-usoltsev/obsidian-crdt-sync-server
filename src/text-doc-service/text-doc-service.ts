@@ -26,6 +26,14 @@ export interface TextDocServiceConfig {
  * Each text file gets its own document name = fileId.
  */
 export function createTextDocService(config: TextDocServiceConfig): Hocuspocus {
+  function getTrackedTextFile(fileId: string) {
+    const file = config.registry.getFile(fileId);
+    if (!file || file.deleted || file.kind !== "text") {
+      throw new Error("Unknown text document");
+    }
+    return file;
+  }
+
   const hocuspocus = new Hocuspocus({
     async onAuthenticate(data: { token: string }) {
       const token = data.token;
@@ -36,6 +44,7 @@ export function createTextDocService(config: TextDocServiceConfig): Hocuspocus {
 
     async onLoadDocument(data: { documentName: string; document: Y.Doc }) {
       const fileId = data.documentName;
+      getTrackedTextFile(fileId);
       log("debug", "Loading text document", { fileId });
 
       const row = config.db
@@ -50,6 +59,7 @@ export function createTextDocService(config: TextDocServiceConfig): Hocuspocus {
 
     async onStoreDocument(data: { documentName: string; document: Y.Doc }) {
       const fileId = data.documentName;
+      getTrackedTextFile(fileId);
       const state = Y.encodeStateAsUpdate(data.document);
 
       config.db.run(

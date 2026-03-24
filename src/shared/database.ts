@@ -3,6 +3,8 @@
  */
 
 import { Database } from "bun:sqlite";
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { log } from "./log";
 
 /**
@@ -10,6 +12,7 @@ import { log } from "./log";
  * Creates all tables if they don't exist and enables auto-vacuum.
  */
 export function openDatabase(dbPath: string): Database {
+  mkdirSync(dirname(dbPath), { recursive: true });
   const db = new Database(dbPath);
 
   // Enable auto-vacuum so deleted state reclaims disk space

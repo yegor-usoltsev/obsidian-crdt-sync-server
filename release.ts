@@ -70,7 +70,7 @@ async function main() {
   const nextVersion = bumpVersion(parseVersion(latestTag), releaseType);
   const nextTag = nextVersion;
 
-  await gitOutput(["tag", nextTag]);
+  await gitOutput(["tag", "-a", nextTag, "-m", nextTag]);
   await gitOutput(["push", "origin", nextTag]);
 
   console.log(`Released ${nextVersion}`);
