@@ -827,9 +827,9 @@ describe("verification tests", () => {
       const doc = new Y.Doc();
 
       const provider = new HocuspocusProvider({
-        // The server routes /docs/:fileId WebSocket connections to Hocuspocus.
-        // The provider connects to this URL directly (name is sent in protocol).
-        url: `ws://localhost:${server.port}/docs/${fileId}?token=${AUTH_TOKEN}`,
+        // The server routes /docs WebSocket connections to Hocuspocus.
+        // Auth and document name are handled via the Hocuspocus wire protocol.
+        url: `ws://localhost:${server.port}/docs`,
         name: fileId,
         document: doc,
         token: AUTH_TOKEN,

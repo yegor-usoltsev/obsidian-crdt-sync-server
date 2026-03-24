@@ -48,7 +48,7 @@ interface WsData {
   authenticated: boolean;
   clientId?: string;
   subscribedRevision?: number;
-  docFileId?: string;
+  isDocConnection?: boolean;
   docAdapter?: BunWsAdapter;
 }
 
@@ -130,17 +130,9 @@ export function createSyncServer(config: SyncServerConfig): SyncServer {
             return new Response("WebSocket upgrade failed", { status: 500 });
           }
 
-          // WebSocket upgrade for text-doc sync (/docs/:fileId)
-          if (url.pathname.startsWith("/docs/")) {
-            const fileId = decodeURIComponent(
-              url.pathname.slice("/docs/".length),
-            );
-            if (!fileId) {
-              return new Response("Bad Request: missing file ID", {
-                status: 400,
-              });
-            }
-
+          // WebSocket upgrade for text-doc sync (/docs)
+          // Auth is handled by Hocuspocus onAuthenticate via the wire protocol.
+          if (url.pathname === "/docs") {
             const docSource =
               req.headers.get("x-forwarded-for") ??
               req.headers.get("x-real-ip") ??
@@ -150,21 +142,8 @@ export function createSyncServer(config: SyncServerConfig): SyncServer {
               return new Response("Too Many Requests", { status: 429 });
             }
 
-            const docTokenParam = url.searchParams.get("token");
-            const docAuthHeader = req.headers.get("authorization");
-            const docToken =
-              docTokenParam ??
-              (docAuthHeader?.startsWith("Bearer ")
-                ? docAuthHeader.slice(7)
-                : null);
-
-            if (!docToken || !verifyToken(docToken, config.authToken)) {
-              if (docToken) recordAuthFailure(docSource);
-              return new Response("Unauthorized", { status: 401 });
-            }
-
             const docUpgraded = srv.upgrade(req, {
-              data: { authenticated: true, docFileId: fileId },
+              data: { authenticated: true, isDocConnection: true },
             });
             if (docUpgraded) return undefined as unknown as Response;
             return new Response("WebSocket upgrade failed", { status: 500 });
@@ -205,27 +184,22 @@ export function createSyncServer(config: SyncServerConfig): SyncServer {
 
         websocket: {
           open(ws) {
-            if (ws.data.docFileId) {
+            if (ws.data.isDocConnection) {
               // Route to Hocuspocus for text-doc sync via BunWsAdapter shim.
               try {
                 const adapter = new BunWsAdapter(ws);
                 ws.data.docAdapter = adapter;
-                // Hocuspocus expects an IncomingMessage-like object with
-                // headers and url properties. Since Bun doesn't provide
-                // this via the WebSocket upgrade, we supply a minimal shim.
                 const mockRequest = {
                   headers: {},
-                  url: `/docs/${ws.data.docFileId}`,
+                  url: "/docs",
                 } as unknown as import("http").IncomingMessage;
                 config.textDocService.handleConnection(
                   adapter as unknown as import("ws").WebSocket,
                   mockRequest,
-                  { documentName: ws.data.docFileId },
                 );
               } catch (err) {
                 log("error", "Hocuspocus handleConnection failed", {
                   error: err instanceof Error ? err.message : String(err),
-                  fileId: ws.data.docFileId,
                 });
                 ws.close();
               }

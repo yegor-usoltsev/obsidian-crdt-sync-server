@@ -289,23 +289,8 @@ describe("composed server integration", () => {
   });
 
   describe("10.6: text-doc WebSocket endpoint", () => {
-    it("rejects unauthenticated /docs/:fileId connection", async () => {
-      const fileId = createFile("text-ws-test.md", "text");
-
-      // Verify auth validation works: no token should get 401
-      const res = await fetch(
-        `http://localhost:${server.port}/docs/${fileId}`,
-        { headers: { Upgrade: "websocket" } },
-      );
-      expect(res.status).toBe(401);
-    });
-
-    it("upgrades authenticated /docs/:fileId connection", async () => {
-      const fileId = createFile("text-ws-auth-test.md", "text");
-
-      const ws = new WebSocket(
-        `ws://localhost:${server.port}/docs/${fileId}?token=${AUTH_TOKEN}`,
-      );
+    it("upgrades /docs connection", async () => {
+      const ws = new WebSocket(`ws://localhost:${server.port}/docs`);
       const result = await new Promise<"opened" | "error">((resolve) => {
         const timeout = setTimeout(() => resolve("error"), 2000);
         ws.onopen = () => {
