@@ -6,7 +6,7 @@
 import type { ServerWebSocket } from "bun";
 
 export class BunWsAdapter {
-  private listeners = new Map<string, Set<Function>>();
+  private listeners = new Map<string, Set<(...args: unknown[]) => unknown>>();
   private ws: ServerWebSocket<unknown>;
 
   /** Maps to WebSocket.OPEN / WebSocket.CLOSED */
@@ -21,7 +21,7 @@ export class BunWsAdapter {
     this.ws = ws;
   }
 
-  on(event: string, listener: Function): this {
+  on(event: string, listener: (...args: unknown[]) => unknown): this {
     let set = this.listeners.get(event);
     if (!set) {
       set = new Set();
@@ -31,7 +31,7 @@ export class BunWsAdapter {
     return this;
   }
 
-  once(event: string, listener: Function): this {
+  once(event: string, listener: (...args: unknown[]) => unknown): this {
     const wrapper = (...args: unknown[]) => {
       this.removeListener(event, wrapper);
       listener(...args);
@@ -39,7 +39,10 @@ export class BunWsAdapter {
     return this.on(event, wrapper);
   }
 
-  removeListener(event: string, listener: Function): this {
+  removeListener(
+    event: string,
+    listener: (...args: unknown[]) => unknown,
+  ): this {
     this.listeners.get(event)?.delete(listener);
     return this;
   }

@@ -117,7 +117,7 @@ export function isBackupExcluded(path: string): boolean {
   // Exclude paths with dot-prefixed directory segments
   const segments = path.split("/");
   for (let i = 0; i < segments.length - 1; i++) {
-    if (segments[i]!.startsWith(".")) return true;
+    if (segments[i]?.startsWith(".")) return true;
   }
   return false;
 }

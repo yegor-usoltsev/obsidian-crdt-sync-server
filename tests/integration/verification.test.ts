@@ -389,6 +389,7 @@ describe("verification tests", () => {
         JSON.stringify({
           action: "history.restore",
           fileId,
+          // biome-ignore lint/style/noNonNullAssertion: checked above
           historyEntryId: createEntry!.id,
         }),
       );
@@ -628,6 +629,7 @@ describe("verification tests", () => {
       // Simulate text snapshot insertion (as done in onStoreDocument)
       db.run(
         "INSERT OR REPLACE INTO text_snapshots (file_id, content_anchor, content, stored_at) VALUES (?, ?, ?, ?)",
+        // biome-ignore lint/style/noNonNullAssertion: checked not null above
         [fileId, updated!.contentAnchor, textContent, Date.now()],
       );
 
@@ -636,6 +638,7 @@ describe("verification tests", () => {
         .query(
           "SELECT content FROM text_snapshots WHERE file_id = ? AND content_anchor = ?",
         )
+        // biome-ignore lint/style/noNonNullAssertion: checked not null above
         .get(fileId, updated!.contentAnchor) as { content: string } | null;
 
       expect(snapshot).not.toBeNull();
@@ -670,6 +673,7 @@ describe("verification tests", () => {
       // Restore to first version
       const restored = historyStore.restore(
         fileId,
+        // biome-ignore lint/style/noNonNullAssertion: checked defined above
         firstContentUpdate!.id,
         "c1",
       );
@@ -678,7 +682,7 @@ describe("verification tests", () => {
 
       // Verify the file metadata shows the restored state
       const fileMeta = registry.getFile(fileId);
-      expect(fileMeta?.contentAnchor).toBe(restored!.contentAnchor);
+      expect(fileMeta?.contentAnchor).toBe(restored?.contentAnchor);
     });
   });
 
@@ -709,6 +713,7 @@ describe("verification tests", () => {
       // Restore to first version
       const restored = historyStore.restore(
         fileId,
+        // biome-ignore lint/style/noNonNullAssertion: checked defined above
         firstContentUpdate!.id,
         "c1",
       );
@@ -718,9 +723,11 @@ describe("verification tests", () => {
       // Check that the settings snapshot was copied to the new anchor
       const restoredSnapshot = settingsStore.getByAnchor(
         fileId,
+        // biome-ignore lint/style/noNonNullAssertion: checked not null above
         restored!.contentAnchor,
       );
       expect(restoredSnapshot).not.toBeNull();
+      // biome-ignore lint/style/noNonNullAssertion: checked not null above
       expect(new TextDecoder().decode(restoredSnapshot!.content)).toBe(
         '{"theme":"light"}',
       );
@@ -780,6 +787,7 @@ describe("verification tests", () => {
       // Restore to version 1
       const restored = historyStore.restore(
         fileId,
+        // biome-ignore lint/style/noNonNullAssertion: checked defined above
         firstContentUpdate!.id,
         "c1",
       );
@@ -793,6 +801,7 @@ describe("verification tests", () => {
       expect(row).not.toBeNull();
 
       const restoredDoc = new Y.Doc();
+      // biome-ignore lint/style/noNonNullAssertion: checked not null above
       Y.applyUpdate(restoredDoc, new Uint8Array(row!.data));
       const restoredText = restoredDoc.getText("content").toString();
       restoredDoc.destroy();
@@ -804,6 +813,7 @@ describe("verification tests", () => {
         .query(
           "SELECT content FROM text_snapshots WHERE file_id = ? AND content_anchor = ?",
         )
+        // biome-ignore lint/style/noNonNullAssertion: checked not null above
         .get(fileId, restored!.contentAnchor) as { content: string } | null;
       expect(newSnapshot).not.toBeNull();
       expect(newSnapshot?.content).toBe("Version 1 text");
@@ -858,6 +868,7 @@ describe("verification tests", () => {
 
       // Verify the Y.Doc content on server
       const serverDoc = new Y.Doc();
+      // biome-ignore lint/style/noNonNullAssertion: checked not null above
       Y.applyUpdate(serverDoc, new Uint8Array(row!.data));
       expect(serverDoc.getText("content").toString()).toBe("Hello from test!");
       serverDoc.destroy();

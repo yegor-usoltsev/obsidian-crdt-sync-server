@@ -88,6 +88,7 @@ export function recordAuthFailure(source: string): void {
     entry.lastAttempt = now;
   }
 
+  // biome-ignore lint/style/noNonNullAssertion: always set in the branch above
   const current = authFailures.get(source)!;
   if (current.count >= MAX_FAILURES_PER_WINDOW) {
     log("warn", "Auth rate limit reached", { source, count: current.count });
