@@ -2,7 +2,7 @@ FROM oven/bun:1.3.10-alpine
 
 WORKDIR /app
 
-RUN apk add --no-cache --update ca-certificates git tzdata
+RUN apk add --no-cache --update ca-certificates git tini tzdata
 
 COPY main.js .
 
@@ -12,4 +12,5 @@ ENV DATA_DIR=/data/db
 ENV BACKUP_GIT_WORKTREE_DIR=/data/git
 VOLUME ["/data"]
 
+ENTRYPOINT ["tini", "--"]
 CMD ["bun", "main.js"]
